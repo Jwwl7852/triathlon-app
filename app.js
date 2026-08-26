@@ -886,7 +886,7 @@ function renderProgram(){
   const rows=state.workouts.filter(x=>isProgramWorkout(x) && x.date>=from && x.date<=to && (disc==='Alle'||x.discipline===disc));
   document.querySelector('#programTable tbody').innerHTML = rows.map(x=>`<tr data-id="${x.id}" class="${statusClass(x.status)} ${x.date===todayIso()?'today':''}"><td>${dkDate(x.date)}</td><td>${x.day}</td><td>${x.week}</td><td>${x.discipline}</td><td>${x.title}</td><td>${garminButtonHtml(x.id)}</td><td>${x.intensity}</td><td>${x.planMinutes}</td><td>${x.planKm}</td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${x.avgHr||''}</td><td>${x.maxHr||''}</td><td>${x.status}</td><td>${x.rpe||''}</td><td>${x.equipment||''}</td><td>${x.notes||''}</td></tr>`).join('');
   document.querySelectorAll('#programTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
-  document.querySelectorAll('[data-garmin-id]').forEach(btn=>btn.onclick=(e)=>{e.preventDefault();e.stopPropagation();openGarminWorkout(btn.dataset.garminId);});
+  document.querySelectorAll('[data-garmin-id]').forEach(btn=>btn.onclick=(e)=>{e.preventDefault();e.stopPropagation();window.openGarminWorkout(btn.dataset.garminId);});
 }
 function renderTrainings(){
   const table=document.querySelector('#trainingsTable tbody');
@@ -2017,7 +2017,7 @@ renderAll();
     if(!id){ alert('Garmin-knappen mangler trænings-id.'); return; }
     const dialog=document.getElementById('garminWorkoutDialog');
     if(!dialog){ alert('Garmin-popup mangler i HTML. Upload v6-filerne igen.'); return; }
-    if(typeof openGarminWorkout === 'function') openGarminWorkout(id);
+    if(typeof window.openGarminWorkout === 'function') window.openGarminWorkout(id);
     else alert('Garmin-funktionen er ikke indlæst. Prøv at genindlæse siden efter deploy.');
   }, true);
 
@@ -2319,3 +2319,65 @@ function setupPrintWeek(){
   if(currentBtn && !currentBtn.dataset.bound){ currentBtn.dataset.bound='1'; currentBtn.addEventListener('click', goToCurrentPrintWeek); }
 }
 
+
+
+/* === V7 VERIFIED FIX: global Garmin + dashboard goal popups === */
+(function(){
+  function n(v){ const x=Number(String(v??'').replace(',','.')); return Number.isFinite(x)?x:0; }
+  function sanitize(s){ return String(s||'garmin-workout').toLowerCase().replace(/[æ]/g,'ae').replace(/[ø]/g,'oe').replace(/[å]/g,'aa').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,64) || 'garmin-workout'; }
+  function dl(name, blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000); }
+  function paceText(minPerKm){ const m=Math.floor(minPerKm||0); const s=Math.round(((minPerKm||0)-m)*60); return `${m}:${String(s).padStart(2,'0')} min/km`; }
+  function minSec(min){ return Math.max(0,Math.round(n(min)*60)); }
+  function kmM(km){ return Math.max(0,Math.round(n(km)*1000)); }
+  function sport(w){ const d=String(w.discipline||'').toLowerCase(); if(d.includes('løb')||d.includes('lob')) return {fit:1,label:'running'}; if(d.includes('cyk')) return {fit:2,label:'cycling'}; if(d.includes('svøm')||d.includes('svoem')) return {fit:5,label:'swimming'}; return {fit:0,label:'generic'}; }
+  function stepsFor(w){
+    const text=`${w.title||''} ${w.intensity||''} ${w.notes||''}`;
+    const planMin=n(w.planMinutes), planKm=n(w.planKm);
+    let m=text.match(/(\d+)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*min\s*(?:roligt\s*)?l[øo]b\s*\/\s*(\d+(?:[,.]\d+)?)\s*min\s*gang/i);
+    if(m){ const reps=parseInt(m[1],10), run=n(m[2]), walk=n(m[3]); return [{name:'Opvarmning',type:'warmup',seconds:300,target:'open'}].concat(Array.from({length:reps}).flatMap((_,i)=>[{name:`Løb ${i+1}`,type:'active',seconds:minSec(run),target:'pace',paceLow:8.0,paceHigh:10.5},{name:`Gang ${i+1}`,type:'rest',seconds:minSec(walk),target:'open'}]),[{name:'Nedkøling',type:'cooldown',seconds:300,target:'open'}]); }
+    m=text.match(/(\d+)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*sek/i);
+    if(m){ const reps=parseInt(m[1],10), sec=n(m[2]); return [{name:'Opvarmning',type:'warmup',seconds:600,target:'open'}].concat(Array.from({length:reps}).flatMap((_,i)=>[{name:`Interval ${i+1}`,type:'active',seconds:Math.round(sec),target:w.discipline==='Løb'?'pace':'open',paceLow:5.5,paceHigh:7.5},{name:`Pause ${i+1}`,type:'rest',seconds:w.discipline==='Cykling'?100:60,target:'open'}]),[{name:'Nedkøling',type:'cooldown',seconds:300,target:'open'}]); }
+    if(planKm>0 && w.discipline==='Løb'){ const p=planMin&&planKm?planMin/planKm:8.5; return [{name:'Opvarmning',type:'warmup',seconds:300,target:'open'},{name:'Hoveddel',type:'active',meters:Math.max(100,kmM(planKm)-1000),target:'pace',paceLow:p*.92,paceHigh:p*1.15},{name:'Nedkøling',type:'cooldown',seconds:300,target:'open'}]; }
+    if(planKm>0) return [{name:'Hoveddel',type:'active',meters:kmM(planKm),target:'open'}];
+    return [{name:'Hoveddel',type:'active',seconds:minSec(planMin||30),target:'open'}];
+  }
+  function jsonWorkout(w){ const sp=sport(w), st=stepsFor(w); return {workoutName:`${w.discipline||'Træning'} - ${w.title||''}`, sport:sp.label, scheduledDate:w.date, description:w.intensity||'', steps:st.map(s=>({name:s.name,type:s.type,duration:s.meters?{type:'distance',meters:s.meters}:{type:'time',seconds:s.seconds||0},target:s.target==='pace'?{type:'pace',minPerKmLow:s.paceLow,minPerKmHigh:s.paceHigh}:{type:'open'}}))}; }
+  function crc(bytes){ const t=[0x0000,0xcc01,0xd801,0x1400,0xf001,0x3c00,0x2800,0xe401,0xa001,0x6c00,0x7800,0xb401,0x5000,0x9c01,0x8801,0x4400]; let c=0; for(const b of bytes){let tmp=t[c&15];c=(c>>4)&0x0fff;c=c^tmp^t[b&15];tmp=t[c&15];c=(c>>4)&0x0fff;c=c^tmp^t[(b>>4)&15];} return c&0xffff; }
+  function fitTime(date){ const base=Date.UTC(1989,11,31); const d=date?new Date(date+'T08:00:00'):new Date(); return Math.max(0,Math.floor((d.getTime()-base)/1000)); }
+  function speedFit(ms){ return Math.max(0,Math.round(ms*1000)); }
+  function paceSpeed(p){ return p>0?1000/(p*60):0; }
+  function fitWorkout(w){
+    const enc=new TextEncoder(), data=[]; const push=(...xs)=>xs.forEach(x=>data.push(x&255)); const u16=v=>push(v,v>>8); const u32=v=>push(v,v>>8,v>>16,v>>24); const str16=s=>{const b=Array.from(enc.encode(String(s||'').slice(0,15))); for(let i=0;i<16;i++) push(b[i]||0);};
+    const sp=sport(w), st=stepsFor(w);
+    push(0x40,0,0,0,0,4); push(0,1,0); push(1,2,0x84); push(2,2,0x84); push(4,4,0x86); push(0); push(5); u16(255); u16(0); u32(fitTime(w.date));
+    push(0x41,0,0,26,0,4); push(4,16,0x07); push(5,1,0); push(6,4,0x86); push(8,2,0x84); push(1); str16(`${w.discipline||'Workout'} ${String(w.title||'').slice(0,8)}`); push(sp.fit); u32(0); u16(st.length);
+    push(0x42,0,0,27,0,8); push(254,2,0x84); push(0,16,0x07); push(1,4,0x86); push(2,1,0); push(3,4,0x86); push(4,1,0); push(5,4,0x86); push(6,4,0x86); push(7,1,0);
+    const im={warmup:0,active:1,rest:2,cooldown:3}; st.forEach((s,i)=>{ push(2); u16(i); str16(s.name); if(s.meters){u32(s.meters);push(1);}else{u32(s.seconds||0);push(0);} if(s.target==='pace'){u32(0);push(0);u32(speedFit(paceSpeed(s.paceHigh)));u32(speedFit(paceSpeed(s.paceLow)));}else{u32(0);push(5);u32(0);u32(0);} push(im[s.type]??1); });
+    const h=[]; const hp=(...xs)=>xs.forEach(x=>h.push(x&255)); const hu16=v=>hp(v,v>>8); const hu32=v=>hp(v,v>>8,v>>16,v>>24); hp(14,16); hu16(100); hu32(data.length); hp(...Array.from(enc.encode('.FIT'))); hu16(crc(h)); const all=[...h,...data]; const c=crc(all); all.push(c&255,c>>8); return new Uint8Array(all);
+  }
+  window.openGarminWorkout=function(id){
+    const w=(window.state?.workouts||state?.workouts||[]).find(x=>String(x.id)===String(id));
+    if(!w){ alert('Kunne ikke finde træningen. Prøv at genindlæse siden.'); return; }
+    const dialog=document.getElementById('garminWorkoutDialog'), title=document.getElementById('garminWorkoutTitle'), sub=document.getElementById('garminWorkoutSubtitle'), body=document.getElementById('garminWorkoutContent');
+    if(!dialog||!body){ alert('Garmin-popup mangler i HTML. Upload hele v7-pakken.'); return; }
+    const jw=jsonWorkout(w);
+    title.textContent=`Garmin workout: ${w.title}`; sub.textContent=`${typeof dkDate==='function'?dkDate(w.date):w.date} · ${w.discipline}`;
+    body.innerHTML=`<div class="garmin-workout-actions"><button type="button" id="v7Fit" class="primary">Download .FIT workout til ur</button><button type="button" id="v7Json" class="secondary">Download JSON backup</button></div><p class="hint">Dette er én struktureret træning til Garmin-uret, ikke en kalender-eksport. Test først med én kort løbetræning. Læg .FIT-filen på uret via USB i <strong>GARMIN/NewFiles</strong>.</p><div class="garmin-steps">${jw.steps.map((s,i)=>`<div class="garmin-step"><small>Step ${i+1} · ${s.type}</small><strong>${s.name}</strong><span>${s.duration.type==='distance'?Math.round(s.duration.meters)+' m':Math.round(s.duration.seconds/60)+' min'} · ${s.target.type==='pace'?'Pace '+paceText(s.target.minPerKmLow)+' - '+paceText(s.target.minPerKmHigh):'Åbent mål'}</span></div>`).join('')}</div>`;
+    body.querySelector('#v7Fit').onclick=()=>dl(`${sanitize(w.date+'-'+w.discipline+'-'+w.title)}.fit`, new Blob([fitWorkout(w)],{type:'application/octet-stream'}));
+    body.querySelector('#v7Json').onclick=()=>dl(`${sanitize(w.date+'-'+w.discipline+'-'+w.title)}.json`, new Blob([JSON.stringify(jw,null,2)],{type:'application/json'}));
+    dialog.showModal();
+  };
+  function split(label,val,hint){return `<div class="goal-popup-split"><small>${label}</small><strong>${val}</strong><span>${hint||''}</span></div>`;}
+  function openGoal(kind){
+    const d=document.getElementById('goalForecastDialog'), title=document.getElementById('goalForecastTitle'), sub=document.getElementById('goalForecastSubtitle'), body=document.getElementById('goalForecastContent'); if(!d||!body) return;
+    if(kind==='marathon'){title.textContent='Copenhagen Marathon prognose';sub.textContent='9. maj 2027 · realistisk pace-strategi';body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>6:18</strong><p>Kontrolleret positiv split: lidt friskere i starten, derefter gradvist fald uden at gå helt ned.</p></div><div class="goal-popup-splits">${split('0-10 km','ca. 8:35/km','roligt og flydende')}${split('10-21,1 km','ca. 8:55/km','find rytmen')}${split('21,1-32 km','ca. 9:10/km','hold igen')}${split('32-42,2 km','ca. 9:45/km','løb/gå struktureret')}</div></div>`;}
+    else if(kind==='koege'){title.textContent='Køge Jernmand prognose';sub.textContent='13. juni 2027 · 1,9 / 90 / 21,1';body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>7:37</strong><p>Generalprøve før IRONMAN. Fokus på rolig svøm, stabil cykel og et kontrolleret løb.</p></div><div class="goal-popup-splits">${split('Svøm','0:48','ca. 2:30/100 m')}${split('T1','0:06','roligt skift')}${split('Cykel','3:25','ca. 26 km/t')}${split('T2','0:05','kontrolleret')}${split('Løb','3:13','ca. 9:10/km')}</div></div>`;}
+    else {title.textContent='IRONMAN Copenhagen prognose';sub.textContent='22. august 2027 · A-mål sub-12';body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>15:20</strong><p>Aktuelt bagud mod sub-12. Prognosen forbedres med kontinuitet, løbeopbygning og cykeludholdenhed.</p></div><div class="goal-popup-splits">${split('Svøm','1:15','mål ca. 1:30')}${split('T1','0:08','roligt skift')}${split('Cykel','7:13','mål ca. 6:00')}${split('T2','0:07','kontrolleret')}${split('Løb','6:36','mål ca. 4:15')}</div></div>`;}
+    d.showModal();
+  }
+  function bindGoals(){ document.querySelectorAll('.goal-card').forEach(card=>{ if(card.dataset.v7Goal==='1') return; const t=card.textContent||''; let k=''; if(t.includes('Copenhagen Marathon')) k='marathon'; else if(t.includes('Køge Jernmand')) k='koege'; else if(t.includes('IRONMAN Copenhagen')) k='ironman'; if(!k) return; card.dataset.v7Goal='1'; card.classList.add('clickable-goal-card'); card.tabIndex=0; card.title='Klik for prognose'; card.addEventListener('click',()=>openGoal(k)); card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGoal(k);}}); }); }
+  function hideIronmanBox(){ const box=document.getElementById('sub12Forecast'); if(box) box.style.display='none'; }
+  function verify(){ bindGoals(); hideIronmanBox(); document.querySelectorAll('[data-garmin-id]').forEach(b=>b.title='Klik for Garmin workout'); }
+  window.addEventListener('load',()=>setTimeout(verify,200));
+  setTimeout(verify,500); setTimeout(verify,1500);
+})();
