@@ -17,7 +17,6 @@
       <button id="backupMenuBtn" class="secondary ui-hidden" aria-hidden="true">Backup</button>
       <button id="exportCsvBtn" class="ui-hidden" aria-hidden="true">Eksportér CSV</button>
       <button id="manualWorkoutBtn" class="secondary">Tilføj træning manuelt</button>
-      <button id="garminExportBtn" class="secondary" type="button">Eksportér til Garmin</button>
       <label class="file-btn fit-btn">Importér træningsfil<input id="activityFileInput" type="file" accept=".fit,.csv,.tcx,.gpx,application/octet-stream,text/csv,application/xml,text/xml" /></label>
       <button id="aiUpdateBtn" class="update-btn ui-hidden" aria-hidden="true">AI-genberegn</button>
     </div>
@@ -55,7 +54,6 @@
       <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="coach">Coach</button>
       <button class="tab" data-tab="strava">Strava</button>
-      <button class="tab" data-tab="trainings">Træninger</button>
       <button class="tab" data-tab="program">Program</button>
       <button class="tab" data-tab="printweek">Print uge</button>
       <button class="tab" data-tab="monthly">Månedsstatus</button>
@@ -165,37 +163,6 @@
       <div class="card">
         <h3>Teknisk log</h3>
         <pre id="stravaLogBox" class="strava-log-box"></pre>
-      </div>
-    </section>
-
-
-    <section id="trainings" class="panel">
-      <div class="card">
-        <div class="section-head">
-          <div>
-            <h3>Træninger</h3>
-            <p class="hint">Tidligere og importerede træninger ligger her. Program-fanen viser kun fremtidige planlagte pas.</p>
-          </div>
-          <label>Disciplin
-            <select id="trainingsDisciplineFilter">
-              <option value="Alle">Alle</option>
-              <option>Svøm</option>
-              <option>Cykling</option>
-              <option>Løb</option>
-              <option>Styrke</option>
-              <option>Race</option>
-              <option>Restitution</option>
-            </select>
-          </label>
-        </div>
-        <div class="table-wrap">
-          <table id="trainingsTable">
-            <thead>
-              <tr><th>Dato</th><th>Dag</th><th>Uge</th><th>Disciplin</th><th>Træning</th><th>Faktisk tid</th><th>Faktisk km</th><th>Puls</th><th>Status</th><th>Udstyr/noter</th></tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
       </div>
     </section>
 

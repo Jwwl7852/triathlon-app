@@ -106,7 +106,257 @@ function loadState(){
 function resetGeneratedKeepActual(){
   const actual = new Map(state.workouts.map(w=>[w.id, {actualMinutes:w.actualMinutes, actualKm:w.actualKm, status:w.status, rpe:w.rpe, equipment:w.equipment, notes:w.notes}]));
   state.workouts = generatePlan().map(w=> ({...w, ...(actual.get(w.id)||{})}));
-  save(); renderAll();
+  save(); 
+
+/* === Garmin structured workout export v4 === */
+(function(){
+  function safeNum(v){ const n = Number(String(v ?? '').replace(',','.')); return Number.isFinite(n) ? n : 0; }
+  function sanitizeFilename(s){ return String(s || 'garmin-workout').toLowerCase().replace(/[æ]/g,'ae').replace(/[ø]/g,'oe').replace(/[å]/g,'aa').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60) || 'garmin-workout'; }
+  function downloadBlob(filename, blob){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function paceToSpeedMs(minPerKm){
+    const v = safeNum(minPerKm);
+    return v > 0 ? 1000 / (v * 60) : 0;
+  }
+  function speedToFit(v){ return Math.max(0, Math.round(v * 1000)); }
+  function kmToMeters(km){ return Math.max(0, Math.round(safeNum(km) * 1000)); }
+  function minToSeconds(min){ return Math.max(0, Math.round(safeNum(min) * 60)); }
+
+  function inferSport(w){
+    const d=String(w.discipline||'').toLowerCase();
+    if(d.includes('løb') || d.includes('lob') || d.includes('run')) return {fit:1, label:'running'};
+    if(d.includes('cyk') || d.includes('bike') || d.includes('ride')) return {fit:2, label:'cycling'};
+    if(d.includes('svøm') || d.includes('svoem') || d.includes('swim')) return {fit:5, label:'swimming'};
+    return {fit:0, label:'generic'};
+  }
+
+  function parseWorkoutSteps(w){
+    const text = `${w.title || ''} ${w.intensity || ''} ${w.notes || ''}`;
+    const discipline = String(w.discipline || '');
+    const planMin = safeNum(w.planMinutes);
+    const planKm = safeNum(w.planKm);
+
+    let m = text.match(/(\d+)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*min\s*(?:roligt\s*)?l[øo]b\s*\/\s*(\d+(?:[,.]\d+)?)\s*min\s*gang/i);
+    if(m){
+      const reps = parseInt(m[1],10), runMin=safeNum(m[2]), walkMin=safeNum(m[3]);
+      return [
+        {name:'Opvarmning', intensity:'warmup', durationType:'time', seconds:Math.max(300, Math.round(planMin*60*.15)), target:'open', note:'Rolig opvarmning'},
+        ...Array.from({length:reps}).flatMap((_,i)=>[
+          {name:`Løb ${i+1}`, intensity:'active', durationType:'time', seconds:minToSeconds(runMin), target:'pace', paceLow:8.0, paceHigh:10.5, note:'Roligt løb'},
+          {name:`Gang ${i+1}`, intensity:'rest', durationType:'time', seconds:minToSeconds(walkMin), target:'open', note:'Gang/restitution'}
+        ]),
+        {name:'Nedkøling', intensity:'cooldown', durationType:'time', seconds:300, target:'open', note:'Rolig afslutning'}
+      ];
+    }
+
+    m = text.match(/(\d+)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*sek/i);
+    if(m){
+      const reps=parseInt(m[1],10), sec=safeNum(m[2]);
+      const restSec = discipline === 'Cykling' ? 100 : 60;
+      return [
+        {name:'Opvarmning', intensity:'warmup', durationType:'time', seconds:600, target:'open', note:'Rolig opvarmning'},
+        ...Array.from({length:reps}).flatMap((_,i)=>[
+          {name:`Interval ${i+1}`, intensity:'active', durationType:'time', seconds:Math.round(sec), target: discipline === 'Løb' ? 'pace' : 'open', paceLow:5.5, paceHigh:7.5, note:'Kontrolleret interval'},
+          {name:`Pause ${i+1}`, intensity:'rest', durationType:'time', seconds:restSec, target:'open', note:'Let pause'}
+        ]),
+        {name:'Nedkøling', intensity:'cooldown', durationType:'time', seconds:300, target:'open', note:'Rolig afslutning'}
+      ];
+    }
+
+    if(planKm > 0){
+      const pace = planMin && planKm ? planMin/planKm : 0;
+      if(discipline === 'Løb'){
+        return [
+          {name:'Opvarmning', intensity:'warmup', durationType:'time', seconds:300, target:'open', note:'Let jog/gang'},
+          {name:'Hoveddel', intensity:'active', durationType:'distance', meters:Math.max(100, kmToMeters(planKm) - 1000), target:'pace', paceLow:pace ? pace*0.92 : 7.0, paceHigh:pace ? pace*1.15 : 10.5, note:text},
+          {name:'Nedkøling', intensity:'cooldown', durationType:'time', seconds:300, target:'open', note:'Rolig afslutning'}
+        ];
+      }
+      if(discipline === 'Cykling'){
+        return [
+          {name:'Opvarmning', intensity:'warmup', durationType:'time', seconds:600, target:'open', note:'Rolig opvarmning'},
+          {name:'Hoveddel', intensity:'active', durationType:'distance', meters:kmToMeters(planKm), target:'open', note:text},
+          {name:'Nedkøling', intensity:'cooldown', durationType:'time', seconds:300, target:'open', note:'Rolig afslutning'}
+        ];
+      }
+      return [{name:'Hoveddel', intensity:'active', durationType:'distance', meters:kmToMeters(planKm), target:'open', note:text}];
+    }
+
+    return [{name:'Hoveddel', intensity:'active', durationType:'time', seconds:minToSeconds(planMin || 30), target:'open', note:text}];
+  }
+
+  function structuredWorkoutJson(w){
+    const sport = inferSport(w);
+    const steps = parseWorkoutSteps(w);
+    return {
+      workoutName: `${w.discipline || 'Træning'} - ${w.title || ''}`.slice(0,80),
+      description: `Eksporteret fra triathlon-app. ${w.intensity || ''}`,
+      sport: sport.label,
+      scheduledDate: w.date || '',
+      steps: steps.map(s=>({
+        name:s.name,
+        type:s.intensity,
+        duration:s.durationType === 'distance' ? {type:'distance', meters:s.meters || 0} : {type:'time', seconds:s.seconds || 0},
+        target:s.target === 'pace' ? {type:'pace', minPerKmLow:s.paceLow, minPerKmHigh:s.paceHigh} : {type:'open'},
+        note:s.note || ''
+      }))
+    };
+  }
+
+  function crc16Fit(bytes){
+    const crcTable = [0x0000,0xcc01,0xd801,0x1400,0xf001,0x3c00,0x2800,0xe401,0xa001,0x6c00,0x7800,0xb401,0x5000,0x9c01,0x8801,0x4400];
+    let crc = 0;
+    for(const byte of bytes){
+      let tmp = crcTable[crc & 0xF];
+      crc = (crc >> 4) & 0x0FFF;
+      crc = crc ^ tmp ^ crcTable[byte & 0xF];
+      tmp = crcTable[crc & 0xF];
+      crc = (crc >> 4) & 0x0FFF;
+      crc = crc ^ tmp ^ crcTable[(byte >> 4) & 0xF];
+    }
+    return crc & 0xFFFF;
+  }
+
+  function fitDateTime(dateIso){
+    const base = Date.UTC(1989,11,31,0,0,0);
+    const d = dateIso ? new Date(dateIso + 'T08:00:00') : new Date();
+    return Math.max(0, Math.floor((d.getTime() - base) / 1000));
+  }
+
+  function makeFitWorkout(w){
+    const encoder = new TextEncoder();
+    const data = [];
+    const push = (...xs)=>xs.forEach(x=>data.push(x & 255));
+    const u16 = v => { push(v, v>>8); };
+    const u32 = v => { push(v, v>>8, v>>16, v>>24); };
+    const str16 = s => {
+      const b = Array.from(encoder.encode(String(s || '').slice(0,15)));
+      for(let i=0;i<16;i++) push(b[i] || 0);
+    };
+
+    const sport = inferSport(w);
+    const steps = parseWorkoutSteps(w);
+
+    // Local 0: file_id, global 0
+    push(0x40, 0, 0, 0, 0, 4);
+    push(0,1,0); push(1,2,0x84); push(2,2,0x84); push(4,4,0x86);
+    push(0x00); push(5); u16(255); u16(0); u32(fitDateTime(w.date));
+
+    // Local 1: workout, global 26
+    push(0x41, 0, 0, 26, 0, 4);
+    push(4,16,0x07); push(5,1,0x00); push(6,4,0x86); push(8,2,0x84);
+    push(0x01); str16(`${w.discipline || 'Workout'} ${String(w.title || '').slice(0,8)}`); push(sport.fit); u32(0); u16(steps.length);
+
+    // Local 2: workout_step, global 27
+    push(0x42, 0, 0, 27, 0, 8);
+    push(254,2,0x84); push(0,16,0x07); push(1,4,0x86); push(2,1,0x00);
+    push(3,4,0x86); push(4,1,0x00); push(5,4,0x86); push(6,4,0x86); push(7,1,0x00);
+
+    const intensityMap = {warmup:0, active:1, rest:2, cooldown:3};
+    steps.forEach((s,i)=>{
+      push(0x02);
+      u16(i);
+      str16(s.name);
+      if(s.durationType === 'distance'){ u32(s.meters || 0); push(1); }
+      else { u32(s.seconds || 0); push(0); }
+      if(s.target === 'pace'){
+        const lowSpeed = speedToFit(paceToSpeedMs(s.paceHigh));
+        const highSpeed = speedToFit(paceToSpeedMs(s.paceLow));
+        u32(0); push(0); u32(lowSpeed); u32(highSpeed);
+      }else{
+        u32(0); push(5); u32(0); u32(0);
+      }
+      push(intensityMap[s.intensity] ?? 1);
+    });
+
+    const header = [];
+    const hpush = (...xs)=>xs.forEach(x=>header.push(x&255));
+    const hu16 = v=>hpush(v, v>>8);
+    const hu32 = v=>hpush(v, v>>8, v>>16, v>>24);
+    hpush(14, 16); hu16(100); hu32(data.length); hpush(...Array.from(encoder.encode('.FIT')));
+    hu16(crc16Fit(header));
+    const all = [...header, ...data];
+    const dataCrc = crc16Fit(all);
+    all.push(dataCrc & 255, dataCrc >> 8);
+    return new Uint8Array(all);
+  }
+
+  function showGarminPreview(w){
+    const dialog=document.getElementById('garminWorkoutDialog');
+    const title=document.getElementById('garminWorkoutTitle');
+    const sub=document.getElementById('garminWorkoutSubtitle');
+    const body=document.getElementById('garminWorkoutContent');
+    if(!dialog || !body) return;
+    const structured=structuredWorkoutJson(w);
+    title.textContent = `Garmin workout: ${w.title || 'Træning'}`;
+    sub.textContent = `${w.date || ''} · ${w.discipline || ''}`;
+    body.innerHTML = `
+      <div class="garmin-workout-actions">
+        <button type="button" class="primary" id="downloadGarminFitBtn">Download .FIT workout til ur</button>
+        <button type="button" class="secondary" id="downloadGarminJsonBtn">Download JSON backup</button>
+      </div>
+      <p class="hint">Brug .FIT-filen som struktureret workout. Første test: læg filen på uret via USB i <strong>GARMIN/NewFiles</strong>. JSON-filen er kun backup/fejlsøgning.</p>
+      <div class="garmin-steps">
+        ${structured.steps.map((s,i)=>`<div class="garmin-step">
+          <small>Step ${i+1} · ${s.type}</small>
+          <strong>${s.name}</strong>
+          <span>${s.duration.type === 'distance' ? Math.round(s.duration.meters) + ' m' : Math.round(s.duration.seconds/60) + ' min'} · ${s.target.type === 'pace' ? 'Pace ' + s.target.minPerKmLow.toFixed(1) + '-' + s.target.minPerKmHigh.toFixed(1) + ' min/km' : 'Åbent mål'}</span>
+          ${s.note ? `<p>${s.note}</p>` : ''}
+        </div>`).join('')}
+      </div>`;
+    body.querySelector('#downloadGarminFitBtn').onclick = ()=>{
+      const fit = makeFitWorkout(w);
+      downloadBlob(`${sanitizeFilename(w.date + '-' + w.discipline + '-' + w.title)}.fit`, new Blob([fit], {type:'application/octet-stream'}));
+    };
+    body.querySelector('#downloadGarminJsonBtn').onclick = ()=>{
+      downloadBlob(`${sanitizeFilename(w.date + '-' + w.discipline + '-' + w.title)}.json`, new Blob([JSON.stringify(structured,null,2)], {type:'application/json'}));
+    };
+    dialog.showModal();
+  }
+
+  function addGarminWorkoutButtons(){
+    document.querySelectorAll('#programTable tbody tr').forEach(tr=>{
+      if(tr.dataset.garminWorkoutBound) return;
+      const id = tr.dataset.id;
+      if(!id || typeof state === 'undefined') return;
+      const w = state.workouts.find(x=>String(x.id)===String(id));
+      if(!w || ['Gennemført','Delvist gennemført','Sprunget over','Skadet/syg'].includes(w.status)) return;
+      const last = tr.lastElementChild;
+      if(!last) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mini-btn garmin-workout-btn';
+      btn.textContent = 'Garmin';
+      btn.title = 'Lav denne træning som struktureret Garmin workout';
+      btn.addEventListener('click', e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        showGarminPreview(w);
+      });
+      last.appendChild(document.createElement('br'));
+      last.appendChild(btn);
+      tr.dataset.garminWorkoutBound = '1';
+    });
+  }
+
+  const oldRenderProgramForGarmin = typeof renderProgram === 'function' ? renderProgram : null;
+  if(oldRenderProgramForGarmin && !window.__garminWorkoutRenderPatch){
+    window.__garminWorkoutRenderPatch = true;
+    renderProgram = function(){
+      oldRenderProgramForGarmin();
+      addGarminWorkoutButtons();
+    };
+  }
+  setTimeout(addGarminWorkoutButtons, 800);
+})();
+
+renderAll();
 }
 
 function resetImportedAndActual(){
@@ -922,163 +1172,6 @@ if(saveManualWorkoutBtn){ saveManualWorkoutBtn.onclick=saveManualWorkout; }
 
 function download(name,content,type){const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); URL.revokeObjectURL(a.href);}
 function toCsv(rows){const headers=['date','day','week','discipline','title','intensity','planMinutes','planKm','actualMinutes','actualKm','avgHr','maxHr','status','rpe','equipment','notes']; return headers.join(';')+'\n'+rows.map(r=>headers.map(h=>`"${String(r[h]??'').replaceAll('"','""')}"`).join(';')).join('\n');}
-
-/* === Safe feature layer v3: history tab, future program, goal popups, Garmin ICS, print, monthly bars === */
-(function(){
-  function n(v){ const x = Number(String(v ?? '').replace(',','.')); return Number.isFinite(x) ? x : 0; }
-  function isDoneStatus(s){ return ['Gennemført','Delvist gennemført','Sprunget over','Skadet/syg'].includes(s); }
-  function today(){ return todayIso(); }
-  function isFuturePlanned(w){ return String(w.date||'') >= today() && !isDoneStatus(w.status); }
-  function isHistory(w){ return String(w.date||'') < today() || isDoneStatus(w.status); }
-  function safeMinToTime(v){ return typeof minToTime === 'function' ? minToTime(v) : `${Math.floor(v/60)}:${String(Math.round(v%60)).padStart(2,'0')}`; }
-  function paceText(minPerKm){
-    if(!Number.isFinite(minPerKm) || minPerKm<=0) return '-';
-    const m=Math.floor(minPerKm); const s=Math.round((minPerKm-m)*60);
-    return `${m}:${String(s).padStart(2,'0')} min/km`;
-  }
-  function goalSplit(label,value,hint){ return `<div class="goal-popup-split"><small>${label}</small><strong>${value}</strong><span>${hint||''}</span></div>`; }
-
-  const originalRenderProgram = renderProgram;
-  renderProgram = function(){
-    const fromEl=document.getElementById('fromDate');
-    const toEl=document.getElementById('toDate');
-    const discEl=document.getElementById('disciplineFilter');
-    const from = fromEl?.value || today();
-    const to = toEl?.value || '2999-12-31';
-    const disc = discEl?.value || 'Alle';
-    const rows = (state.workouts||[]).filter(x=>isFuturePlanned(x) && x.date>=from && x.date<=to && (disc==='Alle'||x.discipline===disc));
-    const tbody=document.querySelector('#programTable tbody');
-    if(!tbody) return;
-    tbody.innerHTML = rows.map(x=>`<tr data-id="${x.id}" class="${statusClass(x.status)} ${x.date===todayIso()?'today':''}"><td>${dkDate(x.date)}</td><td>${x.day}</td><td>${x.week}</td><td>${x.discipline}</td><td>${x.title}</td><td>${x.intensity}</td><td>${x.planMinutes}</td><td>${x.planKm}</td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${x.avgHr||''}</td><td>${x.maxHr||''}</td><td>${x.status}</td><td>${x.rpe||''}</td><td>${x.equipment||''}</td><td>${x.notes||''}</td></tr>`).join('');
-    document.querySelectorAll('#programTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
-  };
-
-  function renderTrainings(){
-    const tbody=document.querySelector('#trainingsTable tbody');
-    if(!tbody) return;
-    const disc=document.getElementById('trainingsDisciplineFilter')?.value || 'Alle';
-    const rows=(state.workouts||[]).filter(isHistory).filter(x=>disc==='Alle'||x.discipline===disc).sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(a.discipline).localeCompare(String(b.discipline)));
-    tbody.innerHTML=rows.map(x=>{
-      const pulse=[x.avgHr,x.maxHr].filter(Boolean).join(' / ');
-      const notes=[x.equipment,x.notes].filter(Boolean).join(' · ');
-      return `<tr data-id="${x.id}" class="${statusClass(x.status)} training-history-row"><td>${dkDate(x.date)}</td><td>${x.day||''}</td><td>${x.week||''}</td><td>${x.discipline||''}</td><td><strong>${x.title||''}</strong><br><small>${x.intensity||''}</small></td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${pulse||''}</td><td>${x.status||''}</td><td>${notes||''}</td></tr>`;
-    }).join('');
-    document.querySelectorAll('#trainingsTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
-  }
-  window.renderTrainings = renderTrainings;
-
-  const originalRenderMonthly = renderMonthly;
-  renderMonthly = function(){
-    const map={}; state.workouts.forEach(w=>{const m=monthKey(w.date); map[m]??=[]; map[m].push(w);});
-    const tbody=document.querySelector('#monthlyTable tbody');
-    if(!tbody) return;
-    tbody.innerHTML = Object.keys(map).sort().map(m=>{
-      const a=map[m], ph=sum(a,'planMinutes')/60, ah=sum(a,'actualMinutes')/60, pct=ph?ah/ph:0;
-      const pctDisplay=Math.round(pct*100); const width=Math.max(0, Math.min(100, pctDisplay));
-      const swim=sum(a.filter(x=>x.discipline==='Svøm'),'actualKm'), bike=sum(a.filter(x=>x.discipline==='Cykling'),'actualKm'), run=sum(a.filter(x=>x.discipline==='Løb'),'actualKm');
-      let status='Afventer data', sug='Indtast faktisk træning den 15. i måneden.';
-      if(ah>0){ if(pct<.75){status='For lav belastning'; sug='Gentag eller reducer næste blok, især løb.';} else if(pct>1.15){status='For høj belastning'; sug='Hold øje med restitution og ømhed.';} else {status='OK'; sug='Fortsæt planlagt progression.';} }
-      return `<tr class="month-progress-row" style="--month-progress:${width}%"><td>${m}</td><td>${ph.toFixed(1)}</td><td>${ah.toFixed(1)}</td><td>${pctDisplay}%</td><td>${swim.toFixed(1)}</td><td>${bike.toFixed(1)}</td><td>${run.toFixed(1)}</td><td>${status}</td><td>${sug}</td></tr>`;
-    }).join('');
-  };
-
-  const originalRenderDashboard = renderDashboard;
-  renderDashboard = function(){
-    originalRenderDashboard();
-    const sub12=document.getElementById('sub12Forecast');
-    if(sub12) sub12.innerHTML='';
-  };
-
-  const originalRenderPrintWeek = renderPrintWeek;
-  renderPrintWeek = function(){
-    const sel = document.getElementById('printWeekSelect');
-    const area = document.getElementById('printWeekArea');
-    if(!sel || !area) return;
-    const week = Number(sel.value || weekNo(todayIso()));
-    const range = weekRangeForWeekNo(week);
-    const rows = state.workouts.filter(w => w.date >= range.start && w.date <= range.end).sort((a,b)=>a.date.localeCompare(b.date) || String(a.discipline).localeCompare(String(b.discipline)));
-    const title = document.getElementById('printWeekTitle');
-    const subtitle = document.getElementById('printWeekSubtitle');
-    const summary = document.getElementById('printWeekSummary');
-    const daysBox = document.getElementById('printWeekDays');
-    if(title) title.textContent = `Uge ${week}`;
-    if(subtitle) subtitle.textContent = `${dkDate(range.start)} - ${dkDate(range.end)} · én side`;
-    const planMinutes = sum(rows,'planMinutes');
-    const swimKm = sum(rows.filter(w=>w.discipline==='Svøm'),'planKm');
-    const bikeKm = sum(rows.filter(w=>w.discipline==='Cykling'),'planKm');
-    const runKm = sum(rows.filter(w=>w.discipline==='Løb'),'planKm');
-    if(summary){ summary.innerHTML = `<div><strong>${safeMinToTime(planMinutes)}</strong><span>Tid</span></div><div><strong>${swimKm.toFixed(1)} km</strong><span>Svøm</span></div><div><strong>${bikeKm.toFixed(0)} km</strong><span>Cykel</span></div><div><strong>${runKm.toFixed(1)} km</strong><span>Løb</span></div>`; }
-    const days=[];
-    for(let i=0;i<7;i++){
-      const date=addDaysIso(range.start,i); const dayRows=rows.filter(w=>w.date===date);
-      days.push(`<div class="print-day compact-print-day"><div class="print-day-head"><strong>${dayName(date)}</strong><span>${dkDate(date)}</span></div>${dayRows.length?dayRows.map(w=>`<div class="print-workout compact-print-workout print-${w.discipline}"><div class="print-workout-main"><span class="print-discipline">${w.discipline}</span><strong>${w.title}</strong><p>${w.intensity||''}</p>${w.equipment?`<small>${w.equipment}</small>`:''}</div><div class="print-workout-numbers"><div><strong>${w.planMinutes||0}</strong><span>min</span></div><div><strong>${w.planKm||0}</strong><span>km</span></div></div></div>`).join(''):`<div class="print-rest">Fri / restitution</div>`}</div>`);
-    }
-    if(daysBox) daysBox.innerHTML=days.join('');
-  };
-
-  function openGoalForecast(kind){
-    const dialog=document.getElementById('goalForecastDialog'); const title=document.getElementById('goalForecastTitle'); const sub=document.getElementById('goalForecastSubtitle'); const body=document.getElementById('goalForecastContent');
-    if(!dialog || !body) return;
-    const g = calculateGoalForecasts();
-    if(kind==='marathon'){
-      const total=g.marathon || 378; const first=total/2.07; const second=total-first; const fp=first/21.1; const sp=second/21.1;
-      title.textContent='Copenhagen Marathon prognose'; sub.textContent='9. maj 2027 · realistisk pace-strategi';
-      body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>${safeMinToTime(total)}</strong><p>Strategien er kontrolleret positiv split: du starter lidt friskere, men ikke hårdt, og accepterer et gradvist fald mod slutningen.</p></div><div class="goal-popup-splits">${goalSplit('0-10 km',paceText(fp*.98),'Let og kontrolleret')}${goalSplit('10-21,1 km',paceText(fp*1.02),'Find rytmen')}${goalSplit('21,1-32 km',paceText(sp*.98),'Hold igen')}${goalSplit('32-42,2 km',paceText(sp*1.04),'Løb/gå struktureret')}</div></div>`;
-    } else if(kind==='koege'){
-      const swim=42,bike=175,run=130; const total=(g.koege|| (swim+6+bike+4+run));
-      title.textContent='Køge Jernmand prognose'; sub.textContent='13. juni 2027 · 1,9 km / 90 km / 21,1 km';
-      body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>${safeMinToTime(total)}</strong><p>Bruges som generalprøve før IRONMAN. Fokus er rolig svøm, stabil cykel og et løb hvor du ikke åbner for hårdt.</p></div><div class="goal-popup-splits">${goalSplit('Svøm',safeMinToTime(swim),'1,9 km')}${goalSplit('T1','0:06','Roligt skift')}${goalSplit('Cykel',safeMinToTime(bike),'90 km')}${goalSplit('T2','0:04','Kontrolleret')}${goalSplit('Løb',safeMinToTime(run),'21,1 km')}</div></div>`;
-    } else {
-      const p=calculateSub12Forecast();
-      title.textContent='IRONMAN Copenhagen prognose'; sub.textContent='22. august 2027 · A-mål sub-12';
-      body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>${safeMinToTime(p.total)}</strong><p>Aktuel vurdering: <strong>${p.status}</strong>. Prognosen bliver mere præcis, når historikken ligger i Træninger og Program kun viser fremtidige pas.</p></div><div class="goal-popup-splits">${goalSplit('Svøm',safeMinToTime(p.swim),'Mål ca. 1:30')}${goalSplit('T1',safeMinToTime(p.t1),'Roligt skift')}${goalSplit('Cykel',safeMinToTime(p.bike),'Mål ca. 6:00')}${goalSplit('T2',safeMinToTime(p.t2),'Kontrolleret')}${goalSplit('Løb',safeMinToTime(p.run),'Mål ca. 4:15')}</div></div>`;
-    }
-    dialog.showModal();
-  }
-
-  function bindGoalCards(){
-    document.querySelectorAll('.goal-card').forEach(card=>{
-      if(card.dataset.goalForecastBound) return;
-      const t=card.textContent||''; let kind='';
-      if(t.includes('Copenhagen Marathon')) kind='marathon'; else if(t.includes('Køge Jernmand')) kind='koege'; else if(t.includes('IRONMAN Copenhagen')) kind='ironman';
-      if(!kind) return;
-      card.dataset.goalForecastBound='1'; card.classList.add('clickable-goal-card'); card.tabIndex=0; card.title='Klik for prognose';
-      card.addEventListener('click',()=>openGoalForecast(kind));
-      card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGoalForecast(kind);}});
-    });
-  }
-
-  function escapeIcs(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
-  function exportGarminIcs(){
-    const rows=(state.workouts||[]).filter(isFuturePlanned).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    if(!rows.length){ alert('Der er ingen fremtidige planlagte træninger at eksportere.'); return; }
-    const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z');
-    const events=rows.map(w=>{
-      const dt=String(w.date).replaceAll('-','');
-      const desc=[`Disciplin: ${w.discipline||''}`,`Plan tid: ${w.planMinutes||0} min`,`Plan distance: ${w.planKm||0} km`,w.intensity?`Intervaller/intensitet: ${w.intensity}`:'',w.notes?`Noter: ${w.notes}`:'',(w.discipline==='Løb'&&n(w.planKm)>0&&n(w.planMinutes)>0)?`Pace: ${paceText(n(w.planMinutes)/n(w.planKm))}`:''].filter(Boolean).join('\n');
-      return ['BEGIN:VEVENT',`UID:${escapeIcs(w.id||Math.random())}@triathlon-app`,`DTSTAMP:${stamp}`,`DTSTART;VALUE=DATE:${dt}`,`SUMMARY:${escapeIcs((w.discipline||'Træning')+': '+(w.title||''))}`,`DESCRIPTION:${escapeIcs(desc)}`,'END:VEVENT'].join('\r\n');
-    }).join('\r\n');
-    download('garmin-planlagte-traeninger.ics',['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//JL Triathlon App//DA','CALSCALE:GREGORIAN',events,'END:VCALENDAR'].join('\r\n'),'text/calendar;charset=utf-8');
-  }
-
-  const originalRenderAll = renderAll;
-  renderAll = function(){
-    originalRenderAll();
-    renderTrainings();
-    bindGoalCards();
-  };
-
-  function bindSafeFeatureControls(){
-    ['fromDate','toDate','disciplineFilter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.onchange=renderProgram; });
-    const clear=document.getElementById('clearFiltersBtn');
-    if(clear) clear.onclick=()=>{ document.getElementById('fromDate').value=today(); document.getElementById('toDate').value=''; document.getElementById('disciplineFilter').value='Alle'; renderProgram(); };
-    const tf=document.getElementById('trainingsDisciplineFilter'); if(tf) tf.onchange=renderTrainings;
-    const gb=document.getElementById('garminExportBtn'); if(gb) gb.onclick=exportGarminIcs;
-  }
-  bindSafeFeatureControls();
-  setTimeout(()=>{ bindSafeFeatureControls(); renderProgram(); renderTrainings(); bindGoalCards(); }, 0);
-})();
-
 renderAll();
 
 
