@@ -2583,3 +2583,639 @@ function setupPrintWeek(){
   setTimeout(relabelGarminButtons,1000);
   setTimeout(relabelGarminButtons,2500);
 })();
+
+
+
+/* === V9 goal popup pace override === */
+(function(){
+  function paceFromKmTime(km, minutes){
+    const pace = Number(minutes || 0) / Number(km || 1);
+    const m = Math.floor(pace);
+    const s = Math.round((pace - m) * 60);
+    return `${m}:${String(s).padStart(2,'0')} min/km`;
+  }
+  function paceFromSpeedKmh(kmh){
+    const pace = 60 / Number(kmh || 1);
+    const m = Math.floor(pace);
+    const s = Math.round((pace - m) * 60);
+    return `${m}:${String(s).padStart(2,'0')} min/km`;
+  }
+  function split(label, value, hint, pace){
+    return `<div class="goal-popup-split"><small>${label}</small><strong>${value}</strong><span>${hint || ''}</span>${pace ? `<span class="pace-line">Pace: ${pace}</span>` : ''}</div>`;
+  }
+  function openGoal(kind){
+    const dialog=document.getElementById('goalForecastDialog');
+    const title=document.getElementById('goalForecastTitle');
+    const sub=document.getElementById('goalForecastSubtitle');
+    const body=document.getElementById('goalForecastContent');
+    if(!dialog || !body) return;
+
+    if(kind === 'marathon'){
+      title.textContent='Copenhagen Marathon prognose';
+      sub.textContent='9. maj 2027 · realistisk pace-strategi';
+      body.innerHTML = `
+        <div class="goal-popup-main">
+          <div>
+            <small>Forventet sluttid</small>
+            <strong>6:18</strong>
+            <p>Strategien er kontrolleret positiv split: starte lidt friskere, men stadig roligt, og derefter acceptere et gradvist fald uden at gå helt ned.</p>
+          </div>
+          <div class="goal-popup-splits">
+            ${split('0-10 km','ca. 1:25','Roligt men flydende','8:30 min/km')}
+            ${split('10-21,1 km','ca. 1:37','Find rytmen','8:45 min/km')}
+            ${split('21,1-32 km','ca. 1:41','Hold igen','9:15 min/km')}
+            ${split('32-42,2 km','ca. 1:35','Løb/gå struktureret','9:20 min/km')}
+          </div>
+        </div>
+        <div class="goal-popup-note">Pace vises i minutter pr. kilometer. Eksempel: 06:00 min/km svarer til 10 km/t.</div>`;
+    } else if(kind === 'koege'){
+      title.textContent='Køge Jernmand prognose';
+      sub.textContent='13. juni 2027 · 1,9 km svøm / 90 km cykel / 21,1 km løb';
+      body.innerHTML = `
+        <div class="goal-popup-main">
+          <div>
+            <small>Forventet sluttid</small>
+            <strong>7:37</strong>
+            <p>½ Ironman bruges som generalprøve før IRONMAN Copenhagen. Fokus er kontrolleret svøm, stabil cykel og et løb hvor du holder igen de første kilometer.</p>
+          </div>
+          <div class="goal-popup-splits">
+            ${split('Svøm','0:48','ca. 2:30/100 m')}
+            ${split('T1','0:06','Roligt skift')}
+            ${split('Cykel','3:25','ca. 26 km/t')}
+            ${split('T2','0:05','Kontrolleret')}
+            ${split('Løb','3:13','21,1 km halvmarathon',paceFromKmTime(21.1,193))}
+          </div>
+        </div>
+        <div class="goal-popup-note">Løbedelen vises som pace i min/km. ${paceFromKmTime(21.1,193)} betyder, at hver kilometer i snit tager cirka denne tid.</div>`;
+    } else {
+      title.textContent='IRONMAN Copenhagen prognose';
+      sub.textContent='22. august 2027 · A-mål sub-12';
+      body.innerHTML = `
+        <div class="goal-popup-main">
+          <div>
+            <small>Forventet sluttid</small>
+            <strong>15:20</strong>
+            <p>Aktuelt bagud mod sub-12. Prognosen forbedres med kontinuitet, løbeopbygning og cykeludholdenhed. Løbedelen vises som pace, fordi det er mest brugbart på dagen.</p>
+          </div>
+          <div class="goal-popup-splits">
+            ${split('Svøm','1:15','Mål ca. 1:30')}
+            ${split('T1','0:08','Roligt skift')}
+            ${split('Cykel','7:13','Mål ca. 6:00')}
+            ${split('T2','0:07','Kontrolleret')}
+            ${split('Løb','6:36','42,2 km marathon',paceFromKmTime(42.2,396))}
+          </div>
+        </div>
+        <div class="goal-popup-note">Løbedelen: ${paceFromKmTime(42.2,396)}. Til sammenligning svarer 06:00 min/km til 10 km/t.</div>`;
+    }
+    dialog.showModal();
+  }
+
+  function bindV9GoalCards(){
+    document.querySelectorAll('.goal-card').forEach(card=>{
+      const txt=card.textContent || '';
+      let kind='';
+      if(txt.includes('Copenhagen Marathon')) kind='marathon';
+      else if(txt.includes('Køge Jernmand')) kind='koege';
+      else if(txt.includes('IRONMAN Copenhagen')) kind='ironman';
+      if(!kind) return;
+
+      const clone=card.cloneNode(true);
+      card.parentNode.replaceChild(clone, card);
+      clone.classList.add('clickable-goal-card');
+      clone.tabIndex=0;
+      clone.title='Klik for prognose';
+      clone.addEventListener('click',()=>openGoal(kind));
+      clone.addEventListener('keydown',e=>{
+        if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openGoal(kind); }
+      });
+    });
+  }
+
+  window.addEventListener('load',()=>setTimeout(bindV9GoalCards,300));
+  setTimeout(bindV9GoalCards,1000);
+  setTimeout(bindV9GoalCards,2500);
+})();
+
+
+
+/* === V10 TrainingPeaks-style calendar === */
+(function(){
+  let calendarCursor = null;
+
+  function calTodayIso(){
+    if(typeof todayIso === 'function') return todayIso();
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function parseIsoDate(iso){
+    const [y,m,d] = String(iso || '').split('-').map(Number);
+    return new Date(y || 1970, (m || 1)-1, d || 1);
+  }
+  function isoDate(d){
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function addDaysDate(d, days){
+    const x = new Date(d);
+    x.setDate(x.getDate()+days);
+    return x;
+  }
+  function monthLabel(d){
+    return d.toLocaleDateString('da-DK', {month:'long', year:'numeric'});
+  }
+  function mondayStart(d){
+    const x = new Date(d.getFullYear(), d.getMonth(), 1);
+    const day = (x.getDay()+6)%7; // Monday=0
+    x.setDate(x.getDate()-day);
+    return x;
+  }
+  function endGridDate(d){
+    const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    const day = (last.getDay()+6)%7;
+    last.setDate(last.getDate() + (6-day));
+    return last;
+  }
+  function n(v){ return Number(String(v ?? '').replace(',','.')) || 0; }
+  function minsText(v){
+    const m = Math.round(n(v));
+    if(!m) return '';
+    if(m < 60) return `${m} min`;
+    return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+  }
+  function kmText(v){
+    const x=n(v);
+    if(!x) return '';
+    return `${x.toFixed(x >= 10 ? 0 : 1).replace('.', ',')} km`;
+  }
+  function workoutDateText(iso){
+    if(typeof dkDate === 'function') return dkDate(iso);
+    return parseIsoDate(iso).toLocaleDateString('da-DK');
+  }
+  function completionRatio(w){
+    const plannedMin = n(w.planMinutes);
+    const actualMin = n(w.actualMinutes);
+    const plannedKm = n(w.planKm);
+    const actualKm = n(w.actualKm);
+    if(plannedMin > 0) return actualMin / plannedMin;
+    if(plannedKm > 0) return actualKm / plannedKm;
+    if(actualMin > 0 || actualKm > 0) return 1;
+    return 0;
+  }
+  function calendarStatus(w){
+    const today = calTodayIso();
+    const status = String(w.status || '');
+    const hasData = n(w.actualMinutes) > 0 || n(w.actualKm) > 0;
+    const isPast = String(w.date) < today;
+    const isFuture = String(w.date) >= today;
+
+    if(status === 'Sprunget over' || status === 'Skadet/syg') return 'red';
+    if(status === 'Gennemført'){
+      const r = completionRatio(w);
+      if(!r) return 'yellow';
+      return (r >= 0.85 && r <= 1.15) ? 'green' : 'yellow';
+    }
+    if(status === 'Delvist gennemført') return 'yellow';
+    if(isPast && !hasData) return 'red';
+    if(isPast && hasData) {
+      const r = completionRatio(w);
+      return (r >= 0.85 && r <= 1.15) ? 'green' : 'yellow';
+    }
+    if(isFuture) return 'blue';
+    return 'blue';
+  }
+  function statusLabel(color){
+    return {green:'Gennemført', yellow:'Afvigelse', red:'Mangler data', blue:'Planlagt'}[color] || 'Planlagt';
+  }
+  function disciplineIcon(d){
+    if(d === 'Svøm') return '🏊';
+    if(d === 'Cykling') return '🚴';
+    if(d === 'Løb') return '👟';
+    if(d === 'Styrke') return '🏋️';
+    if(d === 'Race') return '🏁';
+    return '•';
+  }
+  function workoutCard(w){
+    const color = calendarStatus(w);
+    const hasActual = n(w.actualMinutes) > 0 || n(w.actualKm) > 0;
+    const time = hasActual ? minsText(w.actualMinutes) : minsText(w.planMinutes);
+    const km = hasActual ? kmText(w.actualKm) : kmText(w.planKm);
+    const detail = [time, km].filter(Boolean).join(' · ');
+    const hr = [w.avgHr, w.maxHr].filter(Boolean).join('/');
+    const title = String(w.title || 'Træning').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const intensity = String(w.intensity || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<button type="button" class="cal-workout cal-${color}" data-calendar-workout-id="${w.id}">
+      <div class="cal-workout-top">
+        <span>${disciplineIcon(w.discipline)} ${w.discipline || ''}</span>
+        <small>${statusLabel(color)}</small>
+      </div>
+      <strong>${title}</strong>
+      <span class="cal-detail">${detail || 'Ingen tid/km'}</span>
+      ${intensity ? `<span class="cal-intensity">${intensity}</span>` : ''}
+      ${hr ? `<span class="cal-hr">Puls ${hr}</span>` : ''}
+    </button>`;
+  }
+
+  function renderCalendar(){
+    const grid = document.getElementById('trainingCalendarGrid');
+    const title = document.getElementById('calendarTitle');
+    const summary = document.getElementById('calendarSummary');
+    if(!grid || typeof state === 'undefined' || !Array.isArray(state.workouts)) return;
+
+    if(!calendarCursor){
+      const t = parseIsoDate(calTodayIso());
+      calendarCursor = new Date(t.getFullYear(), t.getMonth(), 1);
+    }
+
+    const monthStart = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+    const start = mondayStart(monthStart);
+    const end = endGridDate(monthStart);
+    const today = calTodayIso();
+
+    if(title) title.textContent = monthLabel(monthStart).replace(/^./, c=>c.toUpperCase());
+
+    const monthRows = state.workouts.filter(w=>{
+      const d = String(w.date || '');
+      return d.slice(0,7) === isoDate(monthStart).slice(0,7);
+    });
+    const done = monthRows.filter(w=>calendarStatus(w)==='green').length;
+    const warn = monthRows.filter(w=>calendarStatus(w)==='yellow').length;
+    const missing = monthRows.filter(w=>calendarStatus(w)==='red').length;
+    const planned = monthRows.filter(w=>calendarStatus(w)==='blue').length;
+    const actualHours = monthRows.reduce((s,w)=>s+n(w.actualMinutes),0)/60;
+    const planHours = monthRows.reduce((s,w)=>s+n(w.planMinutes),0)/60;
+
+    if(summary){
+      summary.innerHTML = `
+        <div><strong>${monthRows.length}</strong><span>pas</span></div>
+        <div class="sum-green"><strong>${done}</strong><span>grøn</span></div>
+        <div class="sum-yellow"><strong>${warn}</strong><span>gul</span></div>
+        <div class="sum-red"><strong>${missing}</strong><span>rød</span></div>
+        <div class="sum-blue"><strong>${planned}</strong><span>planlagt</span></div>
+        <div><strong>${actualHours.toFixed(1)}</strong><span>faktiske timer</span></div>
+        <div><strong>${planHours.toFixed(1)}</strong><span>plan timer</span></div>`;
+    }
+
+    const days = [];
+    for(let d = new Date(start); d <= end; d = addDaysDate(d, 1)){
+      const iso = isoDate(d);
+      const inMonth = d.getMonth() === monthStart.getMonth();
+      const rows = state.workouts
+        .filter(w=>String(w.date)===iso)
+        .sort((a,b)=>{
+          const order = {'Svøm':1,'Cykling':2,'Løb':3,'Styrke':4,'Race':0,'Restitution':9};
+          return (order[a.discipline]||8)-(order[b.discipline]||8) || String(a.title).localeCompare(String(b.title));
+        });
+
+      days.push(`<div class="calendar-day ${inMonth?'':'other-month'} ${iso===today?'calendar-today':''}">
+        <div class="calendar-day-head">
+          <strong>${d.getDate()}</strong>
+          <span>${d.toLocaleDateString('da-DK', {weekday:'short'})}</span>
+        </div>
+        <div class="calendar-day-body">
+          ${rows.length ? rows.map(workoutCard).join('') : '<div class="calendar-empty-day"></div>'}
+        </div>
+      </div>`);
+    }
+    grid.innerHTML = days.join('');
+
+    grid.querySelectorAll('[data-calendar-workout-id]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        const id = btn.getAttribute('data-calendar-workout-id');
+        if(typeof openEdit === 'function') openEdit(id);
+      });
+    });
+  }
+
+  function bindCalendarControls(){
+    const prev = document.getElementById('calendarPrevBtn');
+    const next = document.getElementById('calendarNextBtn');
+    const today = document.getElementById('calendarTodayBtn');
+    if(prev && !prev.dataset.bound){
+      prev.dataset.bound='1';
+      prev.addEventListener('click', ()=>{
+        if(!calendarCursor) calendarCursor = parseIsoDate(calTodayIso());
+        calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth()-1, 1);
+        renderCalendar();
+      });
+    }
+    if(next && !next.dataset.bound){
+      next.dataset.bound='1';
+      next.addEventListener('click', ()=>{
+        if(!calendarCursor) calendarCursor = parseIsoDate(calTodayIso());
+        calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth()+1, 1);
+        renderCalendar();
+      });
+    }
+    if(today && !today.dataset.bound){
+      today.dataset.bound='1';
+      today.addEventListener('click', ()=>{
+        const t=parseIsoDate(calTodayIso());
+        calendarCursor = new Date(t.getFullYear(), t.getMonth(), 1);
+        renderCalendar();
+      });
+    }
+
+    document.querySelectorAll('.tab[data-tab="calendar"]').forEach(btn=>{
+      if(btn.dataset.calendarBound) return;
+      btn.dataset.calendarBound='1';
+      btn.addEventListener('click', ()=>setTimeout(renderCalendar, 50));
+    });
+  }
+
+  const previousRenderAll = typeof renderAll === 'function' ? renderAll : null;
+  if(previousRenderAll && !window.__calendarRenderAllPatched){
+    window.__calendarRenderAllPatched = true;
+    renderAll = function(){
+      previousRenderAll();
+      bindCalendarControls();
+      renderCalendar();
+    };
+  }
+
+  window.renderTrainingCalendar = renderCalendar;
+  window.addEventListener('load', ()=>{
+    setTimeout(()=>{ bindCalendarControls(); renderCalendar(); }, 400);
+    setTimeout(()=>{ bindCalendarControls(); renderCalendar(); }, 1500);
+  });
+})();
+
+
+
+/* === V11 Analytics dashboard === */
+(function(){
+  function n(v){ return Number(String(v ?? '').replace(',','.')) || 0; }
+  function todayIsoLocal(){
+    if(typeof todayIso === 'function') return todayIso();
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function parseIso(iso){
+    const [y,m,d] = String(iso || '').split('-').map(Number);
+    return new Date(y || 1970, (m || 1)-1, d || 1);
+  }
+  function dateMinus(days){
+    const d = parseIso(todayIsoLocal());
+    d.setDate(d.getDate()-days);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function monthKey2(iso){ return String(iso || '').slice(0,7); }
+  function weekKey(iso){
+    const d = parseIso(iso);
+    const day = (d.getDay()+6)%7;
+    d.setDate(d.getDate()-day+3);
+    const firstThursday = new Date(d.getFullYear(),0,4);
+    const firstDay = (firstThursday.getDay()+6)%7;
+    firstThursday.setDate(firstThursday.getDate()-firstDay+3);
+    const week = 1 + Math.round((d-firstThursday)/(7*24*3600*1000));
+    return `${d.getFullYear()}-${String(week).padStart(2,'0')}`;
+  }
+  function fmt1(v){ return (Math.round(n(v)*10)/10).toFixed(1).replace('.', ','); }
+  function fmt0(v){ return String(Math.round(n(v))); }
+  function minToHour(v){ return fmt1(n(v)/60); }
+  function pace(mins, km){
+    if(!n(mins) || !n(km)) return '-';
+    const p = n(mins)/n(km);
+    const m = Math.floor(p);
+    const s = Math.round((p-m)*60);
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+  function speed(km, mins){
+    if(!n(mins) || !n(km)) return '-';
+    return fmt1(n(km)/(n(mins)/60));
+  }
+  function isDone(w){ return ['Gennemført','Delvist gennemført'].includes(w.status) || n(w.actualMinutes)>0 || n(w.actualKm)>0; }
+  function disciplineColorClass(d){
+    if(d==='Svøm') return 'ana-swim';
+    if(d==='Cykling') return 'ana-bike';
+    if(d==='Løb') return 'ana-run';
+    if(d==='Styrke') return 'ana-strength';
+    return 'ana-other';
+  }
+  function filteredWorkouts(){
+    if(typeof state === 'undefined' || !Array.isArray(state.workouts)) return [];
+    const range = document.getElementById('analyticsRange')?.value || '365';
+    const disc = document.getElementById('analyticsDiscipline')?.value || 'Alle';
+    const cutoff = range === 'all' ? '0000-00-00' : dateMinus(Number(range));
+    return state.workouts
+      .filter(w=>String(w.date || '') >= cutoff)
+      .filter(w=>disc === 'Alle' || w.discipline === disc)
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  }
+  function groupBy(arr, fn){
+    const m = {};
+    arr.forEach(x=>{ const k=fn(x); (m[k] ||= []).push(x); });
+    return m;
+  }
+  function sum(arr, field){ return arr.reduce((s,x)=>s+n(x[field]),0); }
+  function card(title, body, cls=''){
+    return `<div class="analytics-card ${cls}"><h4>${title}</h4>${body}</div>`;
+  }
+  function empty(msg='Ikke nok data endnu'){
+    return `<div class="analytics-empty">${msg}</div>`;
+  }
+
+  function barsSvg(labels, values, opts={}){
+    const W=520,H=230,p=36;
+    const max=Math.max(1, ...values.map(n));
+    const bw=(W-p*2)/Math.max(1, values.length);
+    const bars=values.map((v,i)=>{
+      const h=(n(v)/max)*(H-p*2);
+      const x=p+i*bw+3, y=H-p-h;
+      return `<rect x="${x}" y="${y}" width="${Math.max(2,bw-6)}" height="${h}" rx="3"></rect>`;
+    }).join('');
+    const ticks=labels.map((l,i)=>{
+      if(values.length>16 && i%Math.ceil(values.length/10)!==0) return '';
+      const x=p+i*bw+bw/2;
+      return `<text x="${x}" y="${H-10}" text-anchor="middle">${String(l).slice(-5)}</text>`;
+    }).join('');
+    return `<svg class="analytics-svg bars-svg" viewBox="0 0 ${W} ${H}">
+      <line x1="${p}" y1="${H-p}" x2="${W-p}" y2="${H-p}"></line>
+      <line x1="${p}" y1="${p}" x2="${p}" y2="${H-p}"></line>
+      ${bars}${ticks}
+      <text x="${p}" y="18">${opts.unit || ''}</text>
+    </svg>`;
+  }
+
+  function lineSvg(points, opts={}){
+    const W=520,H=230,p=36;
+    const vals=points.map(x=>n(x.value)).filter(Number.isFinite);
+    if(vals.length<2) return empty();
+    const min=Math.min(...vals), max=Math.max(...vals);
+    const span=Math.max(1e-6,max-min);
+    const step=(W-p*2)/(points.length-1);
+    const d=points.map((pt,i)=>{
+      const x=p+i*step;
+      const y=H-p-((n(pt.value)-min)/span)*(H-p*2);
+      return `${i?'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const dots = points.length <= 120 ? points.map((pt,i)=>{
+      const x=p+i*step;
+      const y=H-p-((n(pt.value)-min)/span)*(H-p*2);
+      return `<circle cx="${x}" cy="${y}" r="2"></circle>`;
+    }).join('') : '';
+    return `<svg class="analytics-svg line-svg" viewBox="0 0 ${W} ${H}">
+      <line x1="${p}" y1="${H-p}" x2="${W-p}" y2="${H-p}"></line>
+      <line x1="${p}" y1="${p}" x2="${p}" y2="${H-p}"></line>
+      <path d="${d}"></path>${dots}
+      <text x="${p}" y="18">${fmt1(max)} ${opts.unit||''}</text>
+      <text x="${p}" y="${H-8}">${fmt1(min)} ${opts.unit||''}</text>
+    </svg>`;
+  }
+
+  function pieSvg(items){
+    const total=items.reduce((s,x)=>s+n(x.value),0);
+    if(!total) return empty();
+    let angle=-90;
+    const cx=120, cy=120, r=86;
+    function xy(a){ const rad=a*Math.PI/180; return [cx+r*Math.cos(rad), cy+r*Math.sin(rad)]; }
+    const paths=items.map((it,i)=>{
+      const start=angle;
+      const deg=n(it.value)/total*360;
+      angle += deg;
+      const [x1,y1]=xy(start), [x2,y2]=xy(angle);
+      const large=deg>180?1:0;
+      return `<path class="${disciplineColorClass(it.label)}" d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z"></path>`;
+    }).join('');
+    const legend=items.map(it=>`<div><span class="legend-dot ${disciplineColorClass(it.label)}"></span><strong>${it.label}</strong> ${fmt1(it.value)} (${Math.round(n(it.value)/total*100)}%)</div>`).join('');
+    return `<div class="pie-wrap"><svg class="pie-svg" viewBox="0 0 240 240">${paths}<circle cx="${cx}" cy="${cy}" r="44"></circle></svg><div class="pie-legend">${legend}</div></div>`;
+  }
+
+  function renderKpis(rows){
+    const done=rows.filter(isDone);
+    const planH=sum(rows,'planMinutes')/60;
+    const actualH=sum(rows,'actualMinutes')/60;
+    const km=sum(done,'actualKm');
+    const runKm=sum(done.filter(w=>w.discipline==='Løb'),'actualKm');
+    const bikeKm=sum(done.filter(w=>w.discipline==='Cykling'),'actualKm');
+    const swimKm=sum(done.filter(w=>w.discipline==='Svøm'),'actualKm');
+    const completion=planH ? actualH/planH*100 : 0;
+    const longest=done.reduce((best,w)=>n(w.actualMinutes)>n(best.actualMinutes)?w:best,{actualMinutes:0,title:'-'});
+    const kpis=document.getElementById('analyticsKpis');
+    if(!kpis) return;
+    kpis.innerHTML = `
+      <div><small>Træninger</small><strong>${rows.length}</strong></div>
+      <div><small>Faktiske timer</small><strong>${fmt1(actualH)}</strong></div>
+      <div><small>Plan timer</small><strong>${fmt1(planH)}</strong></div>
+      <div><small>Gennemført</small><strong>${fmt0(completion)}%</strong></div>
+      <div><small>Distance i alt</small><strong>${fmt1(km)} km</strong></div>
+      <div><small>Svøm/cykel/løb</small><strong>${fmt1(swimKm)} / ${fmt0(bikeKm)} / ${fmt1(runKm)}</strong></div>
+      <div><small>Længste pas</small><strong>${longest.title || '-'}</strong></div>`;
+  }
+
+  function renderAnalytics(){
+    const grid=document.getElementById('analyticsGrid');
+    if(!grid) return;
+    const rows=filteredWorkouts();
+    renderKpis(rows);
+    const done=rows.filter(isDone);
+    const byDisc=groupBy(rows,w=>w.discipline||'Andet');
+    const doneByDisc=groupBy(done,w=>w.discipline||'Andet');
+    const weeks=groupBy(rows,w=>weekKey(w.date));
+    const weekKeys=Object.keys(weeks).sort();
+    const months=groupBy(rows,w=>monthKey2(w.date));
+    const monthKeys=Object.keys(months).sort();
+
+    const completedDurationItems=Object.keys(doneByDisc).map(k=>({label:k,value:sum(doneByDisc[k],'actualMinutes')/60}));
+    const completedDistanceItems=Object.keys(doneByDisc).map(k=>({label:k,value:sum(doneByDisc[k],'actualKm')}));
+    const plannedDurationItems=Object.keys(byDisc).map(k=>({label:k,value:sum(byDisc[k],'planMinutes')/60}));
+    const plannedDistanceItems=Object.keys(byDisc).map(k=>({label:k,value:sum(byDisc[k],'planKm')}));
+
+    const weekDuration=weekKeys.map(k=>sum(weeks[k],'actualMinutes')/60);
+    const weekDistance=weekKeys.map(k=>sum(weeks[k],'actualKm'));
+    const weekPlanDuration=weekKeys.map(k=>sum(weeks[k],'planMinutes')/60);
+    const weekPlanDistance=weekKeys.map(k=>sum(weeks[k],'planKm'));
+
+    const hrPoints=done.filter(w=>n(w.avgHr)>0).map(w=>({date:w.date,value:n(w.avgHr)}));
+    const maxHrPoints=done.filter(w=>n(w.maxHr)>0).map(w=>({date:w.date,value:n(w.maxHr)}));
+    const paceRun=done.filter(w=>w.discipline==='Løb' && n(w.actualMinutes)>0 && n(w.actualKm)>0).map(w=>({date:w.date,value:n(w.actualMinutes)/n(w.actualKm)}));
+    const bikeSpeed=done.filter(w=>w.discipline==='Cykling' && n(w.actualMinutes)>0 && n(w.actualKm)>0).map(w=>({date:w.date,value:n(w.actualKm)/(n(w.actualMinutes)/60)}));
+
+    const longestDuration = [...done].sort((a,b)=>n(b.actualMinutes)-n(a.actualMinutes)).slice(0,10);
+    const longestDistance = [...done].sort((a,b)=>n(b.actualKm)-n(a.actualKm)).slice(0,10);
+
+    const monthlyTableRows = monthKeys.slice(-14).map(k=>{
+      const arr=months[k], ph=sum(arr,'planMinutes')/60, ah=sum(arr,'actualMinutes')/60;
+      return `<tr><td>${k}</td><td>${fmt1(ph)}</td><td>${fmt1(ah)}</td><td>${ph?fmt0(ah/ph*100):0}%</td><td>${fmt1(sum(arr,'actualKm'))}</td></tr>`;
+    }).join('');
+
+    const longestTable = longestDistance.map(w=>`<tr><td>${w.date}</td><td>${w.discipline}</td><td>${w.title}</td><td>${fmt1(w.actualKm)}</td><td>${minsTextLocal(w.actualMinutes)}</td></tr>`).join('');
+
+    grid.innerHTML = `
+      ${card('Performance management', lineSvg(weekKeys.map((k,i)=>({date:k,value:weekDuration[i]})), {unit:'t/uge'}) + '<p class="hint">Faktiske timer pr. uge. Senere kan vi lægge CTL/ATL/TSB ovenpå, når TSS/watt/pulsdata er mere komplette.</p>', 'wide')}
+      ${card('Fitness Summary · Completed Duration', pieSvg(completedDurationItems))}
+      ${card('Fitness Summary · Completed Distance', pieSvg(completedDistanceItems))}
+      ${card('Fitness Summary · Planned Duration', pieSvg(plannedDurationItems))}
+      ${card('Fitness Summary · Planned Distance', pieSvg(plannedDistanceItems))}
+      ${card('Duration by week', barsSvg(weekKeys, weekDuration, {unit:'timer'}))}
+      ${card('Distance by week', barsSvg(weekKeys, weekDistance, {unit:'km'}))}
+      ${card('Planned duration by week', barsSvg(weekKeys, weekPlanDuration, {unit:'timer'}))}
+      ${card('Planned distance by week', barsSvg(weekKeys, weekPlanDistance, {unit:'km'}))}
+      ${card('Gns. puls over tid', hrPoints.length ? lineSvg(hrPoints,{unit:'bpm'}) : empty('Ingen pulsmålinger endnu'))}
+      ${card('Maks puls over tid', maxHrPoints.length ? lineSvg(maxHrPoints,{unit:'bpm'}) : empty('Ingen maks-puls endnu'))}
+      ${card('Run pace over tid', paceRun.length ? lineSvg(paceRun,{unit:'min/km'}) : empty('Ingen løbepace endnu'))}
+      ${card('Bike speed over tid', bikeSpeed.length ? lineSvg(bikeSpeed,{unit:'km/t'}) : empty('Ingen cykelfart endnu'))}
+      ${card('Fitness history · måned', `<div class="analytics-table-wrap"><table><thead><tr><th>Måned</th><th>Plan timer</th><th>Faktisk timer</th><th>%</th><th>Km</th></tr></thead><tbody>${monthlyTableRows}</tbody></table></div>`, 'wide')}
+      ${card('Længste workouts · distance', `<div class="analytics-table-wrap"><table><thead><tr><th>Dato</th><th>Disciplin</th><th>Træning</th><th>Km</th><th>Tid</th></tr></thead><tbody>${longestTable || '<tr><td colspan="5">Ingen data</td></tr>'}</tbody></table></div>`, 'wide')}
+      ${card('Longest workout · duration', barsSvg(longestDuration.map(w=>w.date), longestDuration.map(w=>n(w.actualMinutes)/60), {unit:'timer'}))}
+      ${card('Power zones', empty('Kræver wattdata fra Strava/Garmin streams. Kan tilføjes som næste trin.'))}
+      ${card('Heart rate zones', renderHrZones(done))}
+      ${card('Weight / body metrics', renderWeightChart())}
+    `;
+  }
+
+  function minsTextLocal(v){
+    const m=Math.round(n(v));
+    if(!m) return '-';
+    return m<60 ? `${m} min` : `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+  }
+
+  function renderHrZones(done){
+    const hrs=done.map(w=>n(w.avgHr)).filter(x=>x>0);
+    if(!hrs.length) return empty('Ingen pulszoner endnu');
+    const zones=[0,0,0,0,0];
+    hrs.forEach(h=>{
+      if(h<120) zones[0]++; else if(h<135) zones[1]++; else if(h<150) zones[2]++; else if(h<165) zones[3]++; else zones[4]++;
+    });
+    return barsSvg(['Z1','Z2','Z3','Z4','Z5'], zones, {unit:'pas'});
+  }
+
+  function renderWeightChart(){
+    const wd = (typeof state !== 'undefined' && state.weightData) ? state.weightData : null;
+    const logs = wd && Array.isArray(wd.logs) ? wd.logs : [];
+    const points = logs.filter(x=>n(x.weight)>0).map(x=>({date:x.date,value:n(x.weight)}));
+    if(points.length < 2) return empty('Ingen vægtlog endnu');
+    return lineSvg(points,{unit:'kg'});
+  }
+
+  function bindAnalytics(){
+    ['analyticsRange','analyticsDiscipline'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el && !el.dataset.analyticsBound){
+        el.dataset.analyticsBound='1';
+        el.addEventListener('change', renderAnalytics);
+      }
+    });
+    document.querySelectorAll('.tab[data-tab="analytics"]').forEach(btn=>{
+      if(btn.dataset.analyticsBound) return;
+      btn.dataset.analyticsBound='1';
+      btn.addEventListener('click',()=>setTimeout(renderAnalytics,50));
+    });
+  }
+
+  const oldRenderAllAnalytics = typeof renderAll === 'function' ? renderAll : null;
+  if(oldRenderAllAnalytics && !window.__analyticsRenderAllPatched){
+    window.__analyticsRenderAllPatched=true;
+    renderAll=function(){
+      oldRenderAllAnalytics();
+      bindAnalytics();
+      renderAnalytics();
+    };
+  }
+
+  window.renderAnalyticsDashboard = renderAnalytics;
+  window.addEventListener('load', ()=>{
+    setTimeout(()=>{ bindAnalytics(); renderAnalytics(); }, 600);
+    setTimeout(()=>{ bindAnalytics(); renderAnalytics(); }, 1800);
+  });
+})();
