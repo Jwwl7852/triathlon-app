@@ -1026,3 +1026,132 @@ body > .hero{
   border-color:#fecaca;
   color:#991b1b;
 }
+
+
+/* V15 Friendly analytics colors */
+.v13-analytics-panel .analytics-shell{
+  background:linear-gradient(180deg,#f7fbff 0%,#eef5ff 52%,#f7fbff 100%) !important;
+  border:1px solid #d7e7f6 !important;
+  color:#16324f !important;
+  box-shadow:0 18px 40px rgba(15,23,42,.08) !important;
+}
+.v13-analytics-panel .analytics-toolbar h3{
+  color:#12324a !important;
+}
+.v13-analytics-panel .analytics-toolbar .hint,
+.v13-analytics-panel .analytics-actions label{
+  color:#567089 !important;
+}
+.v13-analytics-panel .analytics-actions select{
+  background:#ffffff !important;
+  border:1px solid #c9dceb !important;
+  color:#16324f !important;
+  box-shadow:0 2px 8px rgba(15,23,42,.04);
+}
+.v13-kpi-hero{
+  border:1px solid #b7ddf0 !important;
+  background:linear-gradient(135deg,#e0f7ff 0%,#eefdf8 100%) !important;
+  box-shadow:0 14px 30px rgba(17,94,89,.08) !important;
+}
+.v13-kpi-hero span{
+  color:#0f6f8d !important;
+}
+.v13-kpi-hero strong{
+  color:#113b57 !important;
+}
+.v13-kpi-hero small{
+  color:#35566f !important;
+}
+.v13-ring{
+  border:1px solid #d7e4ef !important;
+  background:linear-gradient(180deg,#ffffff 0%,#f6f9fc 100%) !important;
+  box-shadow:0 10px 22px rgba(15,23,42,.05) !important;
+}
+.v13-ring .track{stroke:#dbe7f1 !important}
+.v13-ring .fill{stroke:#4da7d9 !important}
+.v13-ring.balance .fill{stroke:#49b88a !important}
+.v13-ring.match .fill{stroke:#d7ac3d !important}
+.v13-ring.flow .fill{stroke:#6a9fe8 !important}
+.v13-ring.momentum .fill{stroke:#df7b98 !important}
+.v13-ring-text strong{
+  color:#16324f !important;
+}
+.v13-ring-text span{
+  color:#6f89a0 !important;
+}
+.v13-ring-text small{
+  color:#7e94a8 !important;
+}
+.v13-card{
+  border:1px solid #dbe7f2 !important;
+  background:rgba(255,255,255,.92) !important;
+  box-shadow:0 12px 26px rgba(15,23,42,.06) !important;
+}
+.v13-card-title span{
+  color:#4d8fb9 !important;
+}
+.v13-card-title strong{
+  color:#17344f !important;
+}
+.v13-insight{
+  background:#f8fbff !important;
+  border:1px solid #dbe8f3 !important;
+}
+.v13-insight strong{color:#17344f !important}
+.v13-insight p{color:#4f6981 !important}
+.v13-insight.warn{border-color:#eab4c0 !important;background:#fff4f6 !important}
+.v13-insight.focus{border-color:#eedaa3 !important;background:#fffaf0 !important}
+.v13-insight.good{border-color:#b8e4d0 !important;background:#f1fbf6 !important}
+.v13-insight.info{border-color:#bfe0f1 !important;background:#f1f9ff !important}
+.v13-heat-labels span,
+.v13-card-note,
+.v13-lane-grid span,
+.v13-lane-grid small,
+.v13-record-row span,
+.v13-empty,.v13-empty-mini{
+  color:#68839b !important;
+}
+.v13-heat-cell{background:#dde7ef !important}
+.v13-heat-cell.level-1{background:#8ecae6 !important}
+.v13-heat-cell.level-2{background:#7cd7ad !important}
+.v13-heat-cell.level-3{background:#f3d36c !important}
+.v13-heat-cell.level-4{background:#ef9ab0 !important}
+.v13-lane{
+  background:#fbfdff !important;
+  border:1px solid #dbe7f2 !important;
+}
+.v13-lane-head{color:#17344f !important}
+.v13-lane-head span{
+  background:#e8f0f7 !important;
+  color:#17344f !important;
+}
+.v13-lane-progress{background:#dde7ef !important}
+.v13-lane-progress b{background:#4da7d9 !important}
+.v13-lane.v13-bike .v13-lane-progress b{background:#a98ae4 !important}
+.v13-lane.v13-run .v13-lane-progress b{background:#57c39a !important}
+.v13-lane.v13-strength .v13-lane-progress b{background:#e7c85a !important}
+.v13-lane-grid strong,
+.v13-record-row strong,
+.v13-bar-row strong{color:#17344f !important}
+.v13-bars .v13-bar-row{color:#4f6981 !important}
+.v13-bar-row div{background:#dde7ef !important}
+.v13-bar-row b{background:#4da7d9 !important}
+.v13-bars.distance .v13-bar-row b{background:#57c39a !important}
+.v13-spark path{stroke:#46a5d7 !important}
+.v13-spark.run path{stroke:#45bf92 !important}
+.v13-spark.bike path{stroke:#a388ea !important}
+.v13-spark.distance path{stroke:#e6c54f !important}
+.v13-record-row em,
+.v13-analytics-panel .analytics-svg text{color:#4d8fb9 !important; fill:#5b7893 !important}
+.v13-analytics-panel .analytics-svg line{stroke:#d9e6f0 !important}
+.v13-analytics-panel .analytics-table-wrap{
+  border:1px solid #dbe7f2 !important;
+  background:#fff !important;
+}
+.v13-analytics-panel .analytics-table-wrap th{
+  background:#f5f9fd !important;
+  color:#17344f !important;
+}
+.v13-analytics-panel .analytics-table-wrap td{
+  color:#35506a !important;
+}
