@@ -1925,6 +1925,115 @@ renderAll = function(){
 
 
 renderAll();
+
+/* === v6 verified fixes: Garmin dialog, goal popups, dashboard cleanup === */
+(function(){
+  function v6Num(v){ const n=Number(String(v??'').replace(',','.')); return Number.isFinite(n)?n:0; }
+  function v6Time(mins){ const m=Math.max(0,Math.round(v6Num(mins))); return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`; }
+  function v6Pace(minPerKm){ const v=v6Num(minPerKm); if(!v) return '-'; const m=Math.floor(v); const s=Math.round((v-m)*60); return `${m}:${String(s).padStart(2,'0')} min/km`; }
+  function v6Split(label,value,hint){ return `<div class="goal-popup-split"><small>${label}</small><strong>${value}</strong><span>${hint||''}</span></div>`; }
+
+  function v6HideIronmanDashboardBox(){
+    const box=document.getElementById('sub12Forecast');
+    if(box){ box.classList.add('ui-hidden'); box.innerHTML=''; }
+  }
+
+  function v6OpenGoalForecast(kind){
+    const dialog=document.getElementById('goalForecastDialog');
+    const title=document.getElementById('goalForecastTitle');
+    const sub=document.getElementById('goalForecastSubtitle');
+    const body=document.getElementById('goalForecastContent');
+    if(!dialog||!title||!sub||!body){ alert('Prognose-popup mangler i HTML. Upload v6-filerne igen.'); return; }
+
+    if(kind==='marathon'){
+      const total=378;
+      const firstHalf=total/2.07;
+      const secondHalf=total-firstHalf;
+      const firstPace=firstHalf/21.1;
+      const secondPace=secondHalf/21.1;
+      title.textContent='Copenhagen Marathon prognose';
+      sub.textContent='9. maj 2027 · realistisk pace-strategi';
+      body.innerHTML=`<div class="goal-popup-main">
+        <div><small>Forventet sluttid</small><strong>6:18</strong><p>Realistisk plan: starte kontrolleret, men en anelse friskere end afslutningen. Efter halvvejs accepteres et gradvist fald, så du undgår at gå helt ned.</p></div>
+        <div class="goal-popup-splits">
+          ${v6Split('0-10 km', v6Pace(firstPace*0.98), 'Let og kontrolleret')}
+          ${v6Split('10-21,1 km', v6Pace(firstPace*1.02), 'Find rytmen')}
+          ${v6Split('21,1-32 km', v6Pace(secondPace*0.98), 'Hold igen')}
+          ${v6Split('32-42,2 km', v6Pace(secondPace*1.04), 'Løb/gå struktureret')}
+        </div></div>`;
+    }else if(kind==='koege'){
+      title.textContent='Køge Jernmand prognose';
+      sub.textContent='13. juni 2027 · 1,9 km / 90 km / 21,1 km';
+      body.innerHTML=`<div class="goal-popup-main">
+        <div><small>Forventet sluttid</small><strong>7:37</strong><p>Bruges som generalprøve. Fokus er rolig svøm, stabil cykel, energiindtag og et kontrolleret løb hvor de første 5 km ikke bliver for hårde.</p></div>
+        <div class="goal-popup-splits">
+          ${v6Split('Svøm','0:48','ca. 2:30/100 m')}
+          ${v6Split('T1','0:06','Roligt skift')}
+          ${v6Split('Cykel','3:25','ca. 26 km/t')}
+          ${v6Split('T2','0:05','Kontrolleret')}
+          ${v6Split('Løb','3:13','ca. 9:10 min/km')}
+        </div></div>`;
+    }else{
+      title.textContent='IRONMAN Copenhagen prognose';
+      sub.textContent='22. august 2027 · A-mål sub-12';
+      body.innerHTML=`<div class="goal-popup-main">
+        <div><small>Forventet sluttid</small><strong>15:20</strong><p>Aktuelt bagud mod sub-12. Det vigtigste herfra er stabil kontinuitet, gradvis løbeopbygning og bedre cykeludholdenhed uden skadesrisiko.</p></div>
+        <div class="goal-popup-splits">
+          ${v6Split('Svøm','1:15','Mål ca. 1:30')}
+          ${v6Split('T1','0:08','Roligt skift')}
+          ${v6Split('Cykel','7:13','Mål ca. 6:00')}
+          ${v6Split('T2','0:07','Kontrolleret')}
+          ${v6Split('Løb','6:36','Mål ca. 4:15')}
+        </div></div>`;
+    }
+    dialog.showModal();
+  }
+
+  function v6BindGoalCards(){
+    document.querySelectorAll('.goal-card').forEach(card=>{
+      if(card.dataset.v6GoalBound==='1') return;
+      const text=card.textContent||'';
+      let kind='';
+      if(text.includes('Copenhagen Marathon')) kind='marathon';
+      else if(text.includes('Køge Jernmand')) kind='koege';
+      else if(text.includes('IRONMAN Copenhagen')) kind='ironman';
+      if(!kind) return;
+      card.dataset.v6GoalBound='1';
+      card.classList.add('clickable-goal-card');
+      card.tabIndex=0;
+      card.title='Klik for prognose';
+      card.addEventListener('click',()=>v6OpenGoalForecast(kind));
+      card.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); v6OpenGoalForecast(kind); }});
+    });
+  }
+
+  // Delegated Garmin handler. This is deliberately independent of renderProgram timing.
+  document.addEventListener('click', function(e){
+    const btn=e.target.closest && e.target.closest('.garmin-workout-btn,[data-garmin-id]');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id=btn.getAttribute('data-garmin-id');
+    if(!id){ alert('Garmin-knappen mangler trænings-id.'); return; }
+    const dialog=document.getElementById('garminWorkoutDialog');
+    if(!dialog){ alert('Garmin-popup mangler i HTML. Upload v6-filerne igen.'); return; }
+    if(typeof openGarminWorkout === 'function') openGarminWorkout(id);
+    else alert('Garmin-funktionen er ikke indlæst. Prøv at genindlæse siden efter deploy.');
+  }, true);
+
+  const oldRenderAllV6 = typeof renderAll === 'function' ? renderAll : null;
+  if(oldRenderAllV6 && !window.__v6RenderAllPatch){
+    window.__v6RenderAllPatch=true;
+    renderAll=function(){
+      oldRenderAllV6();
+      v6HideIronmanDashboardBox();
+      v6BindGoalCards();
+    };
+  }
+  window.addEventListener('load',()=>{ setTimeout(()=>{ v6HideIronmanDashboardBox(); v6BindGoalCards(); }, 200); });
+  setTimeout(()=>{ v6HideIronmanDashboardBox(); v6BindGoalCards(); }, 400);
+})();
+
 const csvInput = document.getElementById('csvFileInput');
 if(csvInput){
   csvInput.onchange = (e)=>{
