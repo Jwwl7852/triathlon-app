@@ -113,7 +113,7 @@
           <div id="stravaManualLinks" class="strava-manual-links">
             <strong>Manuel test:</strong>
             <a href="/.netlify/functions/strava-status" target="_blank" rel="noopener">Åbn status</a>
-            <a href="/.netlify/functions/strava-sync?days=365" target="_blank" rel="noopener">Åbn sync 365 dage</a>
+            <a href="/.netlify/functions/strava-sync-page?days=365&page=1&perPage=5" target="_blank" rel="noopener">Åbn sync side 1</a>
             <a href="/.netlify/functions/strava-activities" target="_blank" rel="noopener">Åbn aktiviteter</a>
             <a href="/.netlify/functions/strava-diagnostics" target="_blank" rel="noopener">Åbn diagnostics</a>
           </div>
@@ -1138,10 +1138,32 @@
 
   window.__stravaDirectSync = async function(){
     try{
-      status('Synkroniserer fra Strava. Det kan tage lidt tid...');
-      const data = await getJson(API + '/strava-sync?days=365', {method:'POST', body:JSON.stringify({days:365})});
-      log(data);
-      status(`Synk færdig: ${data.count || 0} aktiviteter.`, 'ok');
+      status('Synkroniserer fra Strava i små bidder...');
+      let page = 1;
+      const perPage = 5;
+      let totalStored = 0;
+      let totalFetched = 0;
+      let done = false;
+
+      while(!done && page <= 80){
+        status(`Synkroniserer side ${page} – ${totalFetched} aktiviteter behandlet...`);
+        const data = await getJson(API + `/strava-sync-page?days=365&page=${page}&perPage=${perPage}`, {
+          method:'POST',
+          body:JSON.stringify({days:365,page,perPage})
+        });
+        log(data);
+
+        totalStored = data.count || totalStored;
+        totalFetched += data.processed || 0;
+        done = !!data.done;
+
+        if(!done) page = data.nextPage || (page + 1);
+
+        // Giv browser/Netlify et kort pusterum mellem kald.
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
+
+      status(`Synk færdig: ${totalStored} aktiviteter gemt. ${totalFetched} aktiviteter behandlet.`, 'ok');
       await loadActivities();
     }catch(e){
       status('Synk fejlede. Se teknisk log.', 'bad');
