@@ -3219,3 +3219,76 @@ function setupPrintWeek(){
     setTimeout(()=>{ bindAnalytics(); renderAnalytics(); }, 1800);
   });
 })();
+
+
+
+/* === V12 Monthly status progress bars === */
+(function(){
+  function monthlyNum(v){
+    const n = Number(String(v ?? '').replace('%','').replace(',','.').trim());
+    return Number.isFinite(n) ? n : 0;
+  }
+  function monthlySegments(pct){
+    const green = Math.max(0, Math.min(100, pct));
+    const missing = Math.max(0, 100 - green);
+    let yellow = 0;
+    let red = 0;
+
+    // Gul del viser den "tæt på" manglende træning, rød viser det store efterslæb.
+    // Eksempel 68%: 68 grøn + 20 gul + 12 rød.
+    if(missing <= 15){
+      yellow = missing;
+      red = 0;
+    }else{
+      yellow = Math.min(20, missing);
+      red = missing - yellow;
+    }
+
+    return {green, yellow, red};
+  }
+  function progressBarHtml(pct){
+    const s = monthlySegments(pct);
+    return `<div class="monthly-progress-cell">
+      <div class="monthly-progress-bar" title="${Math.round(pct)}% gennemført">
+        <span class="monthly-green" style="width:${s.green}%"></span>
+        <span class="monthly-yellow" style="width:${s.yellow}%"></span>
+        <span class="monthly-red" style="width:${s.red}%"></span>
+        <strong>${Math.round(pct)}%</strong>
+      </div>
+    </div>`;
+  }
+  function enhanceMonthlyStatus(){
+    const table = document.querySelector('#monthlyTable');
+    if(!table) return;
+
+    const heads = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim().toLowerCase());
+    const completedIndex = heads.findIndex(h => h.includes('gennemført'));
+    if(completedIndex < 0) return;
+
+    table.classList.add('monthly-progress-table');
+
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const cell = tr.children[completedIndex];
+      if(!cell || cell.dataset.progressEnhanced === '1') return;
+      const pct = monthlyNum(cell.textContent);
+      cell.dataset.progressEnhanced = '1';
+      cell.dataset.progressPct = String(pct);
+      cell.innerHTML = progressBarHtml(pct);
+    });
+  }
+
+  const previousRenderMonthly = typeof renderMonthly === 'function' ? renderMonthly : null;
+  if(previousRenderMonthly && !window.__monthlyProgressV12Patched){
+    window.__monthlyProgressV12Patched = true;
+    renderMonthly = function(){
+      previousRenderMonthly();
+      enhanceMonthlyStatus();
+    };
+  }
+
+  window.enhanceMonthlyStatus = enhanceMonthlyStatus;
+  window.addEventListener('load', () => {
+    setTimeout(enhanceMonthlyStatus, 400);
+    setTimeout(enhanceMonthlyStatus, 1500);
+  });
+})();
