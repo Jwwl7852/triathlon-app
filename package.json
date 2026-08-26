@@ -1,10 +1,12 @@
 {
-  "name": "triathlon-netlify-strava",
+  "name": "triathlon-app-netlify",
   "version": "1.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo \"Static site - no build step\""
+  },
   "dependencies": {
-    "@netlify/blobs": "^8.2.0",
-    "@netlify/functions": "^3.1.10"
+    "@netlify/blobs": "^8.2.0"
   }
 }
