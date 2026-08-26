@@ -100,7 +100,8 @@
           <div class="strava-actions">
             <a id="stravaConnectLink" class="button-like" href="/.netlify/functions/strava-connect" target="_blank" rel="noopener">Forbind Strava</a>
             <button type="button" class="secondary" id="stravaStatusBtn" onclick="window.__stravaDirectStatus && window.__stravaDirectStatus()">Tjek status</button>
-            <button type="button" class="secondary" id="stravaSyncBtn" onclick="window.__stravaDirectSync && window.__stravaDirectSync()">Synk seneste 365 dage</button>
+            <button type="button" class="secondary" id="stravaSync30Btn" onclick="window.__stravaDirectSyncDays && window.__stravaDirectSyncDays(30)">Synk 30 dage</button>
+            <button type="button" class="secondary" id="stravaSyncBtn" onclick="window.__stravaDirectSync && window.__stravaDirectSync()">Synk 365 dage langsomt</button>
             <button type="button" class="secondary" id="stravaImportBtn" onclick="window.__stravaDirectImport && window.__stravaDirectImport()">Importer synk til app</button>
           </div>
 
@@ -113,7 +114,7 @@
           <div id="stravaManualLinks" class="strava-manual-links">
             <strong>Manuel test:</strong>
             <a href="/.netlify/functions/strava-status" target="_blank" rel="noopener">Åbn status</a>
-            <a href="/.netlify/functions/strava-sync-page?days=365&page=1&perPage=5" target="_blank" rel="noopener">Åbn sync side 1</a>
+            <a href="/.netlify/functions/strava-sync-page?days=30&page=1&perPage=2" target="_blank" rel="noopener">Åbn sync 30 dage side 1</a>
             <a href="/.netlify/functions/strava-activities" target="_blank" rel="noopener">Åbn aktiviteter</a>
             <a href="/.netlify/functions/strava-diagnostics" target="_blank" rel="noopener">Åbn diagnostics</a>
           </div>
@@ -1136,22 +1137,27 @@
     }
   };
 
-  window.__stravaDirectSync = async function(){
+  async function runStravaSync(days){
     try{
-      status('Synkroniserer fra Strava i små bidder...');
+      status(`Synkroniserer ${days} dage fra Strava i små bidder...`);
       let page = 1;
-      const perPage = 5;
+      const perPage = 2;
       let totalStored = 0;
       let totalFetched = 0;
       let done = false;
 
-      while(!done && page <= 80){
-        status(`Synkroniserer side ${page} – ${totalFetched} aktiviteter behandlet...`);
-        const data = await getJson(API + `/strava-sync-page?days=365&page=${page}&perPage=${perPage}`, {
+      while(!done && page <= 200){
+        status(`Synkroniserer ${days} dage · side ${page} · ${totalFetched} aktiviteter behandlet...`);
+        const data = await getJson(API + `/strava-sync-page?days=${days}&page=${page}&perPage=${perPage}`, {
           method:'POST',
-          body:JSON.stringify({days:365,page,perPage})
+          body:JSON.stringify({days,page,perPage})
         });
         log(data);
+
+        if(data.rateLimited){
+          status(`Strava rate limit ramt. Vent til ${data.retryAfterText || 'næste 15-minutters vindue'} og tryk synk igen. Gemte aktiviteter indtil nu: ${data.count || totalStored}.`, 'warn');
+          return;
+        }
 
         totalStored = data.count || totalStored;
         totalFetched += data.processed || 0;
@@ -1159,17 +1165,31 @@
 
         if(!done) page = data.nextPage || (page + 1);
 
-        // Giv browser/Netlify et kort pusterum mellem kald.
-        await new Promise(resolve => setTimeout(resolve, 350));
+        // Meget bevidst pause for at skåne Strava API limit.
+        await new Promise(resolve => setTimeout(resolve, 2500));
       }
 
       status(`Synk færdig: ${totalStored} aktiviteter gemt. ${totalFetched} aktiviteter behandlet.`, 'ok');
       await loadActivities();
     }catch(e){
-      status('Synk fejlede. Se teknisk log.', 'bad');
-      log(e.message);
+      const msg = String(e.message || e);
+      if(msg.includes('429') || msg.toLowerCase().includes('rate limit')){
+        status('Strava rate limit ramt. Vent 15-30 minutter og prøv igen. Brug helst “Synk 30 dage” først.', 'warn');
+      } else {
+        status('Synk fejlede. Se teknisk log.', 'bad');
+      }
+      log(msg);
     }
+  }
+
+  window.__stravaDirectSyncDays = async function(days){
+    await runStravaSync(days || 30);
   };
+
+  window.__stravaDirectSync = async function(){
+    await runStravaSync(365);
+  };
+
 
   window.__stravaDirectImport = async function(){
     try{
