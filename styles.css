@@ -1,0 +1,215 @@
+:root{
+  --bg:#f6f7fb;--card:#fff;--text:#182033;--muted:#667085;--line:#d8deea;--blue:#2563eb;--blue2:#dbeafe;--green:#dcfce7;--yellow:#fef3c7;--red:#fee2e2;--purple:#f3e8ff;--shadow:0 12px 30px rgba(15,23,42,.08)
+}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}.app-header{padding:28px;display:flex;justify-content:space-between;gap:20px;align-items:flex-start;background:linear-gradient(135deg,#0f172a,#1d4ed8);color:white}.eyebrow{margin:0 0 6px;text-transform:uppercase;letter-spacing:.12em;font-size:12px;opacity:.8}h1{margin:0;font-size:30px}.subtitle{margin:8px 0 0;color:#dbeafe}.header-actions{display:flex;gap:10px;flex-wrap:wrap}button,.file-btn{border:0;background:var(--blue);color:white;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.2)}button.secondary,.file-btn{background:#e5e7eb;color:#111827;box-shadow:none}.file-btn input{display:none}main{padding:24px}.goals-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:18px}.goal-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)}.goal-card span{color:var(--muted);font-size:13px}.goal-card h2{margin:6px 0;font-size:20px}.goal-card p{margin:0;color:var(--muted)}.goal-card.primary{border-color:#93c5fd;background:linear-gradient(180deg,#eff6ff,#fff)}.tabs{display:flex;gap:8px;margin:12px 0 18px;flex-wrap:wrap}.tab{background:#e8edf7;color:#1e293b;box-shadow:none}.tab.active{background:var(--blue);color:#fff}.panel{display:none}.panel.active{display:block}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.stat{background:var(--card);padding:16px;border-radius:16px;border:1px solid var(--line);box-shadow:var(--shadow)}.stat .label{color:var(--muted);font-size:13px}.stat .value{font-size:28px;font-weight:800;margin-top:5px}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)}.hint{color:var(--muted);font-size:13px}.workout-item{padding:12px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:110px 1fr auto;gap:12px;align-items:center}.badge{border-radius:999px;padding:4px 8px;font-size:12px;background:#e2e8f0}.badge.Svøm{background:#dbeafe}.badge.Cykling{background:#dcfce7}.badge.Løb{background:#fef3c7}.badge.Styrke{background:#f3e8ff}.badge.Race{background:#fee2e2}.toolbar{display:flex;justify-content:space-between;background:var(--card);padding:14px;border:1px solid var(--line);border-radius:16px;margin-bottom:14px;gap:10px}.toolbar div{display:flex;gap:12px;flex-wrap:wrap}.toolbar label{font-size:13px;color:var(--muted)}input,select,textarea{border:1px solid var(--line);border-radius:10px;padding:9px;background:#fff;color:var(--text)}.table-wrap{overflow:auto;max-height:70vh;border-radius:14px;border:1px solid var(--line)}table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top;white-space:nowrap}th{background:#f1f5f9;text-align:left;position:sticky;top:0;z-index:1}tbody tr{cursor:pointer}tbody tr:hover{outline:2px solid #bfdbfe}.status-Gennemført{background:var(--green)}.status-Delvist{background:var(--yellow)}.status-Sprunget{background:var(--red)}.status-Skadet{background:var(--purple)}.today td:nth-child(1),.today td:nth-child(2){background:#fde68a!important;font-weight:800}.form-grid{display:grid;grid-template-columns:1fr 150px auto;gap:10px}.prose p{line-height:1.5}dialog{border:0;border-radius:18px;box-shadow:0 30px 70px rgba(15,23,42,.35);width:min(520px,94vw)}dialog::backdrop{background:rgba(15,23,42,.55)}#editForm{display:grid;gap:12px}#editForm label{display:grid;gap:5px;font-size:13px;color:var(--muted)}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}@media(max-width:900px){.app-header{display:block}.header-actions{margin-top:16px}.goals-grid,.two-col,.stats{grid-template-columns:1fr}.toolbar{display:block}.toolbar div{margin-bottom:10px}.workout-item{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
+
+.update-btn{background:#f59e0b;color:#111827;border-color:#f59e0b;font-weight:700}
+.wide-dialog{max-width:900px;width:min(900px,96vw)}
+#aiPromptOutput{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.fit-result{background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:10px;max-height:55vh;overflow:auto}
+.fit-result table{margin-top:8px}
+.fit-btn{background:#ecfeff;color:#155e75;border:1px solid #a5f3fc}
+
+.danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;}
+.danger:hover{background:#fecaca;}
+
+
+.sub12-card{background:linear-gradient(180deg,#fff,#eff6ff);border:1px solid #bfdbfe;border-radius:18px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.sub12-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.sub12-header h3{margin:3px 0 0}.sub12-header strong{font-size:34px;color:#1d4ed8}.eyebrow-dark{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.split-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0}.split-grid div{background:white;border:1px solid var(--line);border-radius:14px;padding:12px}.split-grid span{display:block;color:var(--muted);font-size:12px}.split-grid strong{display:block;font-size:22px;margin:4px 0}.split-grid small{color:var(--muted)}
+.status-På-vej{border-color:#86efac}.status-Tæt-på{border-color:#fde68a}.status-Bagud{border-color:#fecaca}.status-Mangler-data,.status-Afventer{border-color:#bfdbfe}
+@media(max-width:900px){.split-grid{grid-template-columns:1fr 1fr}.sub12-header{display:block}}
+
+.backup-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}.backup-actions button,.backup-actions .file-btn{text-align:center;width:100%;display:flex;align-items:center;justify-content:center}.backup-actions .file-btn{min-height:40px}@media(max-width:700px){.backup-actions{grid-template-columns:1fr}}
+
+.goal-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.goal-forecast{text-align:right}.goal-forecast small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.goal-forecast strong{display:block;font-size:30px;line-height:1;color:#1d4ed8;margin-top:2px}.goal-card.primary .goal-forecast strong{color:#1d4ed8}@media(max-width:900px){.goal-forecast strong{font-size:26px}}
+
+.tech-grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px}
+.tech-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tech-item{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px}
+.tech-item p{margin:4px 0;color:var(--muted);font-size:13px;line-height:1.35}
+.tech-item small{color:#475569;font-weight:700}
+.tech-item a{white-space:nowrap;background:#eff6ff;color:#1d4ed8;text-decoration:none;border:1px solid #bfdbfe;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:800}
+@media(max-width:900px){.tech-list{grid-template-columns:1fr}.tech-item{display:block}.tech-item a{display:inline-block;margin-top:8px}}
+
+.edit-actions{align-items:center}.dialog-spacer{flex:1}.edit-actions .danger{margin-right:auto}
+
+
+.goal-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.goal-form label{display:grid;gap:5px;font-size:13px;color:var(--muted)}.goal-form .dialog-actions{grid-column:1/-1}.goals-two-col{align-items:start}.progress-wrap{width:140px;height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden;display:inline-block;margin-right:8px;vertical-align:middle}.progress-bar{height:100%;background:#2563eb;border-radius:999px}.goal-status{display:inline-block;border-radius:999px;padding:4px 8px;background:#e2e8f0;font-size:12px;font-weight:700}.goal-status.Opfyldt{background:#dcfce7;color:#166534}.goal-status.Tæt-på{background:#fef3c7;color:#92400e}.goal-status.Bagud{background:#fee2e2;color:#991b1b}.goal-status.På-vej{background:#dbeafe;color:#1e40af}.goal-status.Mangler-data{background:#f1f5f9;color:#475569}.mini{padding:6px 8px;border-radius:8px;font-size:12px;box-shadow:none}#goalsChart{max-width:100%;height:auto}@media(max-width:900px){.goal-form{grid-template-columns:1fr}.progress-wrap{width:100px}}
+
+.link-list{display:grid;gap:10px;margin-top:12px}
+.tech-item{border:1px solid var(--line);border-radius:14px;background:#fff;padding:12px;display:grid;gap:5px}
+.tech-item strong{font-size:15px}
+.tech-item span{color:var(--muted);font-size:13px;line-height:1.35}
+.tech-item a{font-weight:700;color:var(--blue);text-decoration:none}
+.tech-item a:hover{text-decoration:underline}
+
+/* Måloversigt fix: bedre plads og ingen afklippet tekst */
+.goal-progress-list{display:grid;gap:14px;margin-top:18px}
+.goal-progress-row{
+  display:grid;
+  grid-template-columns:minmax(190px, 1.1fr) minmax(240px, 1.3fr) minmax(210px, .9fr);
+  gap:14px;
+  align-items:center;
+}
+.goal-progress-title{font-size:14px;line-height:1.25;white-space:normal;overflow:visible}
+.goal-progress-bar{height:18px;border:1px solid #111827;background:#fff;position:relative;min-width:180px}
+.goal-progress-bar span{display:block;height:100%;background:#111827}
+.goal-progress-meta{font-size:13px;line-height:1.25;white-space:normal;overflow:visible}
+.goal-progress-meta small{color:var(--muted)}
+#goalsOverview,#goalOverview,#maalOverview{overflow:visible}
+@media(max-width:1100px){
+  .goal-progress-row{grid-template-columns:1fr}
+  .goal-progress-bar{width:100%}
+}
+
+/* Ny mål-layout */
+.goals-two-col{display:block}
+.goal-editor-card{margin-bottom:18px}
+.goal-editor-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:16px}
+.goal-help-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:12px;max-width:360px;color:#1e3a8a}
+.goal-help-box strong{display:block;margin-bottom:4px}
+.goal-help-box span{font-size:13px;line-height:1.35}
+.goal-form-modern{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;align-items:end}
+.goal-form-modern label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+.goal-form-modern .wide{grid-column:span 2}
+.goal-form-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;margin-top:4px}
+.goals-table-card{margin-top:18px}
+.goal-table-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.goals-table-wrap{max-height:none;overflow:auto}
+#goalsTable{min-width:1100px}
+#goalsTable th,#goalsTable td{white-space:normal;vertical-align:middle}
+.goal-name-cell{min-width:260px}
+.goal-progress-cell{min-width:210px}
+.goal-actions{white-space:nowrap!important}
+.progress-wrap{height:14px;background:#e5e7eb;border-radius:999px;overflow:hidden;display:inline-block;width:150px;vertical-align:middle;margin-right:8px}
+.progress-bar{height:100%;background:var(--blue);border-radius:999px}
+.goal-status{border-radius:999px;padding:4px 8px;font-weight:700;font-size:12px;background:#e5e7eb;color:#1f2937}
+.goal-status.Bagud{background:#fee2e2;color:#991b1b}
+.goal-status.Opfyldt{background:#dcfce7;color:#166534}
+.goal-status.Tæt-på{background:#fef3c7;color:#92400e}
+.goal-status.På-vej{background:#dbeafe;color:#1e40af}
+.mini{padding:6px 8px;font-size:12px}
+@media(max-width:1000px){
+  .goal-editor-head{display:block}
+  .goal-help-box{max-width:none;margin-top:12px}
+  .goal-form-modern{grid-template-columns:1fr}
+  .goal-form-modern .wide{grid-column:auto}
+}
+
+
+/* Print ugeprogram */
+.print-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+.print-toolbar label{display:grid;gap:6px;font-size:13px;color:var(--muted);min-width:280px}
+.print-week-sheet{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow);margin-top:16px}
+.print-week-header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:2px solid #e5e7eb;padding-bottom:14px;margin-bottom:16px}
+.print-week-header h2{margin:2px 0 0;font-size:28px}
+.print-week-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;min-width:420px}
+.print-week-summary div{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc;text-align:center}
+.print-week-summary strong{display:block;font-size:18px}
+.print-week-summary span{font-size:12px;color:var(--muted)}
+.print-week-days{display:grid;gap:12px}
+.print-day{border:1px solid #cbd5e1;border-radius:14px;overflow:hidden;break-inside:avoid}
+.print-day-head{display:flex;justify-content:space-between;background:#f1f5f9;padding:10px 12px;border-bottom:1px solid #cbd5e1}
+.print-workout{padding:12px;border-bottom:1px solid #e5e7eb;display:grid;grid-template-columns:1fr 140px 220px;gap:12px;align-items:start}
+.print-workout:last-child{border-bottom:0}
+.print-discipline{display:inline-block;border-radius:999px;background:#e5e7eb;padding:3px 8px;font-size:12px;font-weight:700;margin-bottom:5px}
+.print-workout-main p{margin:4px 0 4px;color:#334155;font-size:13px;line-height:1.35}
+.print-workout-main small{color:var(--muted)}
+.print-workout-numbers{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.print-workout-numbers div{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;background:#fff}
+.print-workout-numbers strong{display:block;font-size:18px}
+.print-workout-numbers span{font-size:12px;color:var(--muted)}
+.print-handwrite{font-size:12px;line-height:1.8}
+.print-notes{grid-column:1/-1;font-size:12px;color:#475569;margin-top:2px}
+.print-rest{padding:12px;color:#64748b;font-style:italic}
+.print-Svøm{background:#eff6ff}
+.print-Cykling{background:#f0fdf4}
+.print-Løb{background:#fffbeb}
+.print-Styrke{background:#faf5ff}
+.print-Race{background:#fef2f2}
+@media(max-width:1000px){
+  .print-week-header{display:block}
+  .print-week-summary{min-width:0;grid-template-columns:repeat(2,1fr);margin-top:12px}
+  .print-workout{grid-template-columns:1fr}
+}
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  body{background:#fff;color:#000}
+  .app-header,.tabs,.no-print,.two-col:not(.print-keep),#dashboard,#program,#monthly,#goals,#equipment,#technique,#settings{display:none!important}
+  main{padding:0}
+  #printweek{display:block!important}
+  .print-week-sheet{box-shadow:none;border:0;border-radius:0;margin:0;padding:0}
+  .print-week-header{page-break-after:avoid}
+  .print-day{break-inside:avoid;border-color:#999;margin-bottom:8px}
+  .print-day-head{background:#eee!important;color:#000}
+  .print-workout{break-inside:avoid;background:#fff!important;grid-template-columns:1fr 110px 170px;padding:8px}
+  .print-workout-main p{font-size:11px}
+  .print-handwrite,.print-notes{font-size:11px}
+  .print-discipline{border:1px solid #999;background:#fff!important}
+  button,.file-btn{display:none!important}
+}
+
+/* Pulsdata */
+.hr-hint{color:var(--muted);font-size:12px}
+
+/* Direkte vægtmodul */
+.weight-form-final{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}
+.weight-form-final label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+.weight-actions{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap}
+.weight-debug-status{margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#f8fafc;color:#334155}
+.weight-status-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 16px}
+.weight-stat{border:1px solid var(--line);background:#f8fafc;border-radius:14px;padding:12px}
+.weight-stat span{display:block;color:var(--muted);font-size:12px}
+.weight-stat strong{display:block;font-size:20px;margin-top:4px}
+.weight-stat.wide{grid-column:1/-1}
+#weightChart{width:100%;height:auto;max-width:100%}
+@media(max-width:850px){.weight-form-final,.weight-status-cards{grid-template-columns:1fr}}
+
+/* Vægtmåldato */
+.weight-form-final{grid-template-columns:repeat(3,minmax(160px,1fr))}
+@media(max-width:1050px){.weight-form-final{grid-template-columns:repeat(2,minmax(160px,1fr))}}
+@media(max-width:700px){.weight-form-final{grid-template-columns:1fr}}
+
+/* Vægttabsplan */
+.weight-plan-advice{display:grid;gap:10px}
+.advice-box{border:1px solid var(--line);border-radius:14px;padding:14px;background:#f8fafc}
+.advice-box p{margin:8px 0 0;color:var(--muted);line-height:1.45}
+.advice-box.ok{background:#f0fdf4;border-color:#bbf7d0}
+.advice-box.warn{background:#fffbeb;border-color:#fde68a}
+.advice-box.danger{background:#fef2f2;border-color:#fecaca}
+.weight-form-final{grid-template-columns:repeat(3,minmax(160px,1fr))}
+@media(max-width:1050px){.weight-form-final{grid-template-columns:repeat(2,minmax(160px,1fr))}}
+@media(max-width:700px){.weight-form-final{grid-template-columns:1fr}}
+
+/* Coach-udvidelse */
+.coach-hero-card{display:grid;gap:14px}.coach-decision-box{border-radius:16px;padding:16px;border:1px solid var(--line);background:#f8fafc}.coach-decision-box.green{background:#f0fdf4;border-color:#bbf7d0}.coach-decision-box.yellow{background:#fffbeb;border-color:#fde68a}.coach-decision-box.red{background:#fef2f2;border-color:#fecaca}.coach-decision-box p{margin:8px 0 0;color:var(--muted);line-height:1.4}.readiness-score-box{display:flex;gap:14px;align-items:center}.readiness-circle{width:76px;height:76px;border-radius:999px;display:grid;place-items:center;font-size:28px;font-weight:800;border:4px solid #cbd5e1;background:#fff}.readiness-circle.Grøn{border-color:#22c55e;color:#166534}.readiness-circle.Gul{border-color:#f59e0b;color:#92400e}.readiness-circle.Rød{border-color:#ef4444;color:#991b1b}.readiness-score-box p{margin:4px 0 0;color:var(--muted)}.coach-form{display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:12px}.coach-form label{display:grid;gap:6px;font-size:13px;color:var(--muted)}.coach-form .dialog-actions{grid-column:1/-1}.coach-rec{font-weight:800}.coach-comment,.coach-warnings,.backup-reminder-box{border:1px solid var(--line);border-radius:14px;background:#f8fafc;padding:14px}.coach-comment p{margin:0 0 10px;line-height:1.45}.coach-warning{padding:10px;border-bottom:1px solid var(--line)}.coach-warning:last-child{border-bottom:0}.backup-reminder-box.green{background:#f0fdf4;border-color:#bbf7d0}.backup-reminder-box.yellow{background:#fffbeb;border-color:#fde68a}.backup-reminder-box.red{background:#fef2f2;border-color:#fecaca}#coachStatusPackage{width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}@media(max-width:900px){.coach-form{grid-template-columns:1fr}.readiness-score-box{align-items:flex-start}}
+
+/* Redigerbart udstyr */
+.equipment-actions{display:flex;gap:8px;flex-wrap:wrap}
+button.mini{padding:7px 11px;font-size:12px;border-radius:10px}
+#equipmentDialog .dialog-form{min-width:min(520px,92vw)}
+
+/* Strava */
+.strava-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.strava-status-box{border:1px solid var(--line);background:#f8fafc;border-radius:14px;padding:12px;margin-top:12px}
+.strava-status-box.ok{background:#f0fdf4;border-color:#bbf7d0}
+.strava-status-box.warn{background:#fffbeb;border-color:#fde68a}
+.strava-status-box.bad{background:#fef2f2;border-color:#fecaca}
+.strava-list{margin:8px 0 0;padding-left:20px;color:var(--muted);line-height:1.6}
+.strava-log-box{white-space:pre-wrap;background:#0f172a;color:#dbeafe;border-radius:14px;padding:14px;min-height:150px;max-height:280px;overflow:auto;font-size:12px}
+
+.button-like{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;border:0}
+.button-like:hover{text-decoration:none;filter:brightness(.96)}
+
+.strava-manual-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#f8fafc}
+.strava-manual-links a{font-weight:700}
+
+/* Netlify Strava */
+.strava-pin-box{margin-top:10px}
+.strava-pin-box label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+.strava-pin-box input{max-width:320px}
+.strava-manual-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#f8fafc}
+.strava-manual-links a{font-weight:700}
+.button-like{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;border:0}
+.button-like:hover{text-decoration:none;filter:brightness(.96)}

@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Triathlon Plan 2026-2027</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Træningsplan</p>
+      <h1>Marathon → Køge Jernmand → IRONMAN Copenhagen</h1>
+      <p class="subtitle">Start: 19. august 2026 · personlig plan baseret på dine tidligere succesuger · A-mål sub-12</p>
+    </div>
+    <div class="header-actions">
+      <button id="backupMenuBtn" class="secondary">Backup</button>
+      <button id="exportCsvBtn">Eksportér CSV</button>
+      <button id="manualWorkoutBtn" class="secondary">Tilføj træning manuelt</button>
+      <label class="file-btn fit-btn">Importér træningsfil<input id="activityFileInput" type="file" accept=".fit,.csv,.tcx,.gpx,application/octet-stream,text/csv,application/xml,text/xml" /></label>
+      <button id="aiUpdateBtn" class="update-btn">AI-genberegn</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="goals-grid">
+      <article class="goal-card">
+        <div class="goal-top">
+          <span>Delmål 1</span>
+          <div class="goal-forecast"><small>Forventet</small><strong id="marathonGoalTime">--:--</strong></div>
+        </div>
+        <h2>Copenhagen Marathon</h2>
+        <p>9. maj 2027 · 42,2 km løb</p>
+      </article>
+      <article class="goal-card">
+        <div class="goal-top">
+          <span>Delmål 2</span>
+          <div class="goal-forecast"><small>Forventet</small><strong id="koegeGoalTime">--:--</strong></div>
+        </div>
+        <h2>Køge Jernmand</h2>
+        <p>13. juni 2027 · 1,9 km / 90 km / 21,1 km</p>
+      </article>
+      <article class="goal-card primary">
+        <div class="goal-top">
+          <span>Hovedmål</span>
+          <div class="goal-forecast"><small>Forventet</small><strong id="ironmanGoalTime">--:--</strong></div>
+        </div>
+        <h2>IRONMAN Copenhagen</h2>
+        <p>22. august 2027 · 3,8 km / 180 km / 42,2 km · A-mål sub-12</p>
+      </article>
+    </section>
+
+    <nav class="tabs" aria-label="Faner">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="coach">Coach</button>
+      <button class="tab" data-tab="strava">Strava</button>
+      <button class="tab" data-tab="program">Program</button>
+      <button class="tab" data-tab="printweek">Print uge</button>
+      <button class="tab" data-tab="monthly">Månedsstatus</button>
+      <button class="tab" data-tab="goals">Mål</button>
+      <button class="tab" data-tab="weight">Vægt</button>
+      <button class="tab" data-tab="equipment">Udstyr</button>
+      <button class="tab" data-tab="technique">Teknik</button>
+      <button class="tab" data-tab="settings">Indstillinger</button>
+    </nav>
+
+    <section id="dashboard" class="panel active">
+      <div class="stats" id="topStats"></div>
+      <div id="sub12Forecast"></div>
+      <div class="two-col">
+        <div class="card">
+          <h3>Næste 14 dage</h3>
+          <div id="upcomingList" class="workout-list"></div>
+        </div>
+        <div class="card">
+          <h3>Samlet plan</h3>
+          <canvas id="disciplineChart" width="800" height="360"></canvas>
+          <p class="hint">Grafen viser planlagt distance fordelt på disciplin.</p>
+        </div>
+      </div>
+    </section>
+    <section id="coach" class="panel">
+      <div class="two-col">
+        <div class="card coach-hero-card"><h3>Dagens anbefaling</h3><div id="coachTodayDecision" class="coach-decision-box"></div><div id="readinessScoreBox" class="readiness-score-box"></div></div>
+        <div class="card"><h3>Hurtig registrering</h3><p class="hint">Brug denne kort dagligt eller efter hårde pas. Den bruges til at justere anbefalinger.</p><form id="wellnessForm" class="coach-form"><label>Dato <input id="wellnessDate" type="date" /></label><label>Energi 1-10 <input id="wellnessEnergy" type="number" min="1" max="10" step="1" /></label><label>Træthed 0-10 <input id="wellnessFatigue" type="number" min="0" max="10" step="1" /></label><label>Smerte/skade 0-10 <input id="wellnessPain" type="number" min="0" max="10" step="1" /></label><label>Søvn, timer <input id="wellnessSleep" type="number" min="0" max="14" step="0.25" /></label><label>Kommentar <input id="wellnessNote" /></label><div class="dialog-actions"><button type="submit">Gem dagsform</button></div></form><p id="wellnessStatus" class="hint"></p></div>
+      </div>
+      <div class="card"><h3>Plan A/B/C – næste 14 dage</h3><p class="hint">A er fuldt pas. B er reduceret. C er minimumspas.</p><div class="table-wrap"><table id="abcPlanTable"><thead><tr><th>Dato</th><th>Pas</th><th>Plan A</th><th>Plan B</th><th>Plan C</th><th>Anbefaling</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="two-col"><div class="card"><h3>Ugens coach-kommentar</h3><div id="weeklyCoachComment" class="coach-comment"></div></div><div class="card"><h3>Advarsler</h3><div id="coachWarnings" class="coach-warnings"></div></div></div>
+      <div class="two-col"><div class="card"><h3>Statuspakke til ChatGPT</h3><p class="hint">Kopier denne tekst ind til mig, når du vil have en præcis genberegning.</p><textarea id="coachStatusPackage" rows="10" readonly></textarea><div class="dialog-actions"><button type="button" id="refreshCoachPackageBtn" class="secondary">Opdater statuspakke</button><button type="button" id="copyCoachPackageBtn">Kopiér tekst</button></div><p id="copyCoachStatus" class="hint"></p></div><div class="card"><h3>Backup-status</h3><div id="backupReminderBox" class="backup-reminder-box"></div><div class="dialog-actions"><button type="button" id="markBackupBtn" class="secondary">Jeg har taget backup i dag</button></div></div></div>
+    </section>
+
+
+
+    <section id="strava" class="panel">
+      <div class="two-col">
+        <div class="card">
+          <h3>Strava-forbindelse</h3>
+          <p class="hint">Strava kører via Netlify Functions, så klienthemmelighed og tokens ligger på Netlify — ikke i HTML-filen.</p>
+
+          <div class="strava-actions">
+            <a id="stravaConnectLink" class="button-like" href="/.netlify/functions/strava-connect" target="_blank" rel="noopener">Forbind Strava</a>
+            <button type="button" class="secondary" id="stravaStatusBtn" onclick="window.__stravaDirectStatus && window.__stravaDirectStatus()">Tjek status</button>
+            <button type="button" class="secondary" id="stravaSyncBtn" onclick="window.__stravaDirectSync && window.__stravaDirectSync()">Synk seneste 365 dage</button>
+            <button type="button" class="secondary" id="stravaImportBtn" onclick="window.__stravaDirectImport && window.__stravaDirectImport()">Importer synk til app</button>
+          </div>
+
+          <div id="stravaStatusBox" class="strava-status-box">Status: ikke tjekket</div>
+          <div class="strava-pin-box">
+            <label>App PIN, hvis du sætter APP_PIN i Netlify
+              <input id="stravaPinInput" type="password" placeholder="Valgfrit, men anbefales" />
+            </label>
+          </div>
+          <div id="stravaManualLinks" class="strava-manual-links">
+            <strong>Manuel test:</strong>
+            <a href="/.netlify/functions/strava-status" target="_blank" rel="noopener">Åbn status</a>
+            <a href="/.netlify/functions/strava-sync?days=365" target="_blank" rel="noopener">Åbn sync 365 dage</a>
+            <a href="/.netlify/functions/strava-activities" target="_blank" rel="noopener">Åbn aktiviteter</a>
+          </div>
+          
+          <p class="hint">Hvis “Forbind Strava” ikke åbner noget, så test først om serveren kører:</p>
+          <p><a id="stravaServerTestLink" href="http://localhost:8787" target="_blank" rel="noopener">Åbn lokal Strava-server-test</a></p>
+        </div>
+
+        <div class="card">
+          <h3>Hvad hentes fra Strava?</h3>
+          <ul class="strava-list">
+            <li>Aktivitetstype, dato, tid, distance og højdemeter</li>
+            <li>Gennemsnitspuls og makspuls</li>
+            <li>Watt, kadence, hastighed/pace hvor Strava har data</li>
+            <li>Laps og detaljer</li>
+            <li>Streams/tidsserier: tid, distance, puls, watt, kadence, højde, fart og GPS</li>
+            <li>Rå aktivitet gemmes lokalt i backendens datafil</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Seneste Strava-aktiviteter</h3>
+        <div class="table-wrap">
+          <table id="stravaActivityTable">
+            <thead>
+              <tr><th>Dato</th><th>Type</th><th>Navn</th><th>Distance</th><th>Tid</th><th>Puls</th><th>Watt</th><th>Matchet</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Teknisk log</h3>
+        <pre id="stravaLogBox" class="strava-log-box"></pre>
+      </div>
+    </section>
+
+    <section id="program" class="panel">
+      <div class="toolbar">
+        <div>
+          <label>Fra dato <input id="fromDate" type="date" /></label>
+          <label>Til dato <input id="toDate" type="date" /></label>
+          <label>Disciplin
+            <select id="disciplineFilter">
+              <option value="Alle">Alle</option>
+              <option>Svøm</option>
+              <option>Cykling</option>
+              <option>Løb</option>
+              <option>Styrke</option>
+              <option>Race</option>
+              <option>Restitution</option>
+            </select>
+          </label>
+        </div>
+        <button id="clearFiltersBtn" class="secondary">Nulstil filter</button>
+      </div>
+      <div class="table-wrap">
+        <table id="programTable">
+          <thead>
+            <tr>
+              <th>Dato</th><th>Dag</th><th>Uge</th><th>Disciplin</th><th>Plan</th><th>Intensitet</th><th>Plan tid</th><th>Plan km</th><th>Faktisk tid</th><th>Faktisk km</th><th>Gns. puls</th><th>Maks puls</th><th>Status</th><th>RPE</th><th>Udstyr/sted</th><th>Noter</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+
+    <section id="printweek" class="panel">
+      <div class="card print-controls-card no-print">
+        <h3>Print ugeprogram</h3>
+        <p class="hint">Vælg en uge og print programmet ud i papirform. Der er også plads til at skrive faktisk tid, distance, RPE og noter i hånden.</p>
+        <div class="print-toolbar">
+          <label>Vælg uge
+            <select id="printWeekSelect"></select>
+          </label>
+          <button id="printCurrentWeekBtn" class="secondary" type="button">Denne uge</button>
+          <button id="printWeekBtn" type="button">Print ugeprogram</button>
+        </div>
+      </div>
+
+      <div id="printWeekArea" class="print-week-sheet">
+        <div class="print-week-header">
+          <div>
+            <p class="eyebrow-dark">Ugeprogram</p>
+            <h2 id="printWeekTitle">Vælg en uge</h2>
+            <p id="printWeekSubtitle" class="hint"></p>
+          </div>
+          <div class="print-week-summary" id="printWeekSummary"></div>
+        </div>
+        <div id="printWeekDays" class="print-week-days"></div>
+      </div>
+    </section>
+
+    <section id="monthly" class="panel">
+      <div class="card">
+        <h3>Månedsstatus</h3>
+        <p class="hint">Brug denne fane den 15. hver måned. Indtast faktiske data i Program-fanen først.</p>
+        <div class="table-wrap">
+          <table id="monthlyTable">
+            <thead>
+              <tr><th>Måned</th><th>Plan timer</th><th>Faktisk timer</th><th>Gennemført</th><th>Svøm km</th><th>Cykel km</th><th>Løb km</th><th>Vurdering</th><th>Forslag</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="goals" class="panel">
+      <div class="card goal-editor-card">
+        <div class="goal-editor-head">
+          <div>
+            <h3>Tilføj / redigér eget mål</h3>
+            <p class="hint">Opret fx “100 km løb i september”, “20 svømmepas”, “10 timers cykling” eller “5 km under 30 min”. Alle mål vises i tabellen nedenfor.</p>
+          </div>
+          <div class="goal-help-box">
+            <strong>Tip</strong>
+            <span>Til “5 km under 30 min” vælg <b>Distance på tid</b>, distance <b>5 km</b> og måltid <b>30 min</b>.</span>
+          </div>
+        </div>
+
+        <form id="goalForm" class="goal-form goal-form-modern">
+          <input type="hidden" id="goalId" />
+
+          <label class="wide">Målnavn
+            <input id="goalName" placeholder="Fx 5 km under 30 min" required />
+          </label>
+
+          <label>Måltype
+            <select id="goalType">
+              <option value="distance">Distance</option>
+              <option value="DistanceTime">Distance på tid</option>
+              <option value="hours">Træningstid</option>
+              <option value="sessions">Antal pas</option>
+              <option value="raceTime">Race-sluttid</option>
+            </select>
+          </label>
+
+          <label>Disciplin
+            <select id="goalDiscipline">
+              <option value="Alle">Alle</option>
+              <option>Svøm</option>
+              <option>Cykling</option>
+              <option>Løb</option>
+              <option>Styrke</option>
+            </select>
+          </label>
+
+          <label class="race-field">Race, hvis måltype er sluttid
+            <select id="goalRace">
+              <option value="ironman">IRONMAN Copenhagen</option>
+              <option value="koege">Køge Jernmand</option>
+              <option value="marathon">Copenhagen Marathon</option>
+            </select>
+          </label>
+
+          <label class="distance-time-field">Distance til tidsmål
+            <input id="goalDistanceKm" type="number" min="0" step="0.1" placeholder="Fx 5" />
+          </label>
+
+          <label>Fra dato
+            <input id="goalStart" type="date" />
+          </label>
+
+          <label>Til dato
+            <input id="goalEnd" type="date" />
+          </label>
+
+          <label id="goalTargetLabel">Målværdi
+            <input id="goalTarget" type="text" placeholder="Fx 100, 10, 20 eller 30" required />
+          </label>
+
+          <label>Enhed / tid
+            <select id="goalUnit">
+              <option value="km">km</option>
+              <option value="hours">timer</option>
+              <option value="sessions">pas</option>
+              <option value="min">minutter</option>
+              <option value="time">timer:minutter</option>
+            </select>
+          </label>
+
+          <div class="goal-form-actions">
+            <button type="button" id="clearGoalFormBtn" class="secondary">Ryd</button>
+            <button type="submit">Gem mål</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card goals-table-card">
+        <div class="goal-table-head">
+          <div>
+            <h3>Dine mål</h3>
+            <p class="hint">Her vises både standardmål og alle de mål, du selv opretter eller redigerer.</p>
+          </div>
+        </div>
+        <div class="table-wrap goals-table-wrap">
+          <table id="goalsTable">
+            <thead>
+              <tr>
+                <th>Mål</th>
+                <th>Type</th>
+                <th>Periode</th>
+                <th>Status</th>
+                <th>Aktuelt</th>
+                <th>Mål</th>
+                <th>Progression</th>
+                <th>Handling</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    
+    <section id="weight" class="panel">
+      <div class="two-col">
+        <div class="card">
+          <h3>Vægttabsplan</h3>
+          <p class="hint">Planen styrer efter et roligt og realistisk vægttab, så du kan tabe dig uden at ødelægge restitution og træningsopbygning. Måldatoen er som standard Copenhagen Marathon.</p>
+
+          <div class="weight-form-final">
+            <label>Startvægt, kg
+              <input id="weightStart" type="number" min="40" max="180" step="0.1" placeholder="Fx 93" />
+            </label>
+            <label>Målvægt, kg
+              <input id="weightTarget" type="number" min="40" max="180" step="0.1" placeholder="Fx 82" />
+            </label>
+            <label>Måldato for vægt
+              <input id="weightTargetDate" type="date" value="2027-05-09" />
+            </label>
+            <label>Dato for måling
+              <input id="weightDate" type="date" />
+            </label>
+            <label>Aktuel vægt, kg
+              <input id="weightCurrent" type="number" min="40" max="180" step="0.1" placeholder="Fx 92,5" />
+            </label>
+            <label>Maks vægttab pr. uge
+              <input id="weightMaxLoss" type="number" min="0.2" max="1.0" step="0.1" value="0.5" />
+            </label>
+            <label>Strategi
+              <select id="weightStrategy">
+                <option value="balanced">Balanceret: 0,3-0,5 kg/uge</option>
+                <option value="conservative">Forsigtig: mest fokus på restitution</option>
+                <option value="race">Race-sikker: stabilisering før race</option>
+              </select>
+            </label>
+            <label>Brug vægt til træningsplan
+              <select id="weightUseInPlan">
+                <option value="yes">Ja</option>
+                <option value="no">Nej</option>
+              </select>
+            </label>
+            <div class="weight-actions">
+              <button type="button" id="weightSaveBtn" onclick="window.__triWeightSave && window.__triWeightSave()">Gem vægtmåling</button>
+              <button type="button" class="secondary" id="weightRecalcBtn" onclick="window.__triWeightRecalc && window.__triWeightRecalc()">Genberegn fremtidig plan</button>
+            </div>
+          </div>
+
+          <div id="weightDebugStatus" class="weight-debug-status">Status: klar</div>
+        </div>
+
+        <div class="card">
+          <h3>Vægtstatus</h3>
+          <div id="weightStatusCards" class="weight-status-cards"></div>
+          <canvas id="weightChart" width="760" height="320"></canvas>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3>Automatisk vægtplan</h3>
+          <p class="hint">Appen laver delmål frem mod måldatoen og vurderer, om planen er rolig, presset eller for aggressiv.</p>
+          <div id="weightPlanAdvice" class="weight-plan-advice"></div>
+        </div>
+        <div class="card">
+          <h3>Delmål</h3>
+          <div class="table-wrap">
+            <table id="weightMilestoneTable">
+              <thead><tr><th>Dato</th><th>Forventet vægt</th><th>Status</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Vægtlog</h3>
+        <div class="table-wrap">
+          <table id="weightLogTable">
+            <thead><tr><th>Dato</th><th>Vægt</th><th>Fra start</th><th>Til mål</th><th>Handling</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+<section id="equipment" class="panel">
+      <div class="two-col">
+        <div class="card">
+          <h3>Tilføj udstyr/sted</h3>
+          <form id="equipmentForm" class="form-grid">
+            <input id="equipmentName" placeholder="Navn, fx Saucony løbesko" required />
+            <select id="equipmentType">
+              <option>Cykel</option><option>Løbesko</option><option>Svømning</option><option>Styrke</option><option>Andet</option>
+            </select>
+            <button type="submit">Tilføj</button>
+          </form>
+          <p class="hint">Udstyr gemmes lokalt i din browser og kan vælges på hver træning.</p>
+        </div>
+        <div class="card">
+          <h3>Oversigt</h3>
+          <div class="table-wrap">
+            <table id="equipmentTable"><thead><tr><th>Udstyr/sted</th><th>Type</th><th>Pas</th><th>Faktisk km</th><th>Faktisk timer</th><th></th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="technique" class="panel">
+      <div class="card">
+        <h3>Core, løbeteknik og svømmeteknik</h3>
+        <p class="hint">Disse øvelser er valgt til triathlon, fordi de forbedrer stabilitet, løbeøkonomi, kropskontrol i vandet og reducerer unødig belastning. Brug dem som korte teknikblokke, ikke som hårde ekstra træningspas.</p>
+      </div>
+
+      <div class="tech-grid">
+        <div class="card">
+          <h3>Coretræning – 10 øvelser</h3>
+          <p class="hint">Brug 6-8 øvelser ad gangen. 2 runder i starten. 20-40 sek. pr. øvelse eller 8-12 kontrollerede gentagelser.</p>
+          <div id="coreTechniqueList" class="tech-list"></div>
+        </div>
+
+        <div class="card">
+          <h3>Løbeteknik</h3>
+          <p class="hint">Lav 8-12 min efter opvarmning på rolige løbedage. Stop mens teknikken stadig føles skarp.</p>
+          <div id="runTechniqueList" class="tech-list"></div>
+        </div>
+
+                <div class="card">
+          <h3>Styrkeprogram – Vedligeholdelse 1.0</h3>
+          <p class="hint">Dit gamle styrkeprogram omregnet til kilo. Brug det som vedligeholdelse/stabilitet ved siden af triathlontræningen.</p>
+          <div id="maintenanceStrengthList" class="tech-list"></div>
+        </div>
+
+        <div class="card">
+          <h3>Svømmeteknik</h3>
+          <p class="hint">Læg 2-3 små teknikdrills ind i dine 700→1.500 m morgenpas. Fokus: balance, vejrtrækning, rotation og catch.</p>
+          <div id="swimTechniqueList" class="tech-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings" class="panel">
+      <div class="card prose">
+        <h3>Sådan er planen bygget</h3>
+        <p><strong>Mål:</strong> A-mål er IRONMAN Copenhagen under 12 timer. B-mål er 12:00-12:30. C-mål er at gennemføre sikkert og uden skade.</p>
+        <p><strong>Mandag/onsdag/fredag:</strong> svøm om morgenen. Starter ved 700 m og bygger roligt op til maks. 1,5 km pr. pas.</p>
+        <p><strong>Tirsdag/torsdag/søndag:</strong> faste cykeldage. Fra oktober til ca. midt/slut marts køres cykling som hometrainer indendørs.</p>
+        <p><strong>Fredag eftermiddag og lørdag:</strong> fri/restitution.</p>
+        <p><strong>Søndag:</strong> fast cykeldag. Før marathon holdes søndags-cykling moderat; efter marathon bliver søndag primært lang cykel/brick.</p>
+        <p><strong>Løbets hovedpas:</strong> placeres onsdag, fordi fredag eftermiddag og lørdag holdes fri, og søndag er fast cykeldag.</p>
+        <p><strong>Personlig model:</strong> planen er justeret efter dine tidligere succesuger fra TrainingPeaks: 3 faste svøm, 3 cykeldage, 1-2 styrkepas, teknikfokus og kontrolleret løb/gang-opbygning.</p>
+        <p><strong>Løb:</strong> starter forsigtigt fra næsten scratch, men med udgangspunkt i at du kan løbe ca. 5 km med lidt gang. Ugens hovedløb ligger onsdag, og de korte løb bruger løb/gang og teknik.</p>
+        <p><strong>Egne mål:</strong> fanen Mål lader dig oprette mål for distance, timer, antal pas eller race-sluttid. Progression beregnes ud fra dine faktiske indtastede/importerede træninger.</p>
+        <p><strong>Data:</strong> alt gemmes i browserens localStorage. Brug eksportér backup med jævne mellemrum.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="editDialog">
+    <form method="dialog" id="editForm">
+      <h3 id="editTitle">Registrér træning</h3>
+      <input type="hidden" id="editId" />
+      <label>Faktisk tid, minutter <input id="actualMinutes" type="number" min="0" step="1" /></label>
+      <label>Faktisk distance, km <input id="actualKm" type="number" min="0" step="0.1" /></label>
+      <label>Gns. puls <input id="avgHrInput" type="number" min="0" step="1" /></label>
+      <label>Maks puls <input id="maxHrInput" type="number" min="0" step="1" /></label>
+      <label>Status
+        <select id="statusInput"><option>Planlagt</option><option>Gennemført</option><option>Delvist gennemført</option><option>Sprunget over</option><option>Skadet/syg</option><option>Flyttet</option></select>
+      </label>
+      <label>RPE <input id="rpeInput" type="number" min="1" max="10" step="1" /></label>
+      <label>Årsag hvis afbrudt/misset
+        <select id="reasonInput"><option value="">Ingen / ikke relevant</option><option>For hårdt</option><option>Manglende tid</option><option>Træthed</option><option>Smerte/skade</option><option>Sygdom</option><option>Teknisk problem</option><option>Andet</option></select>
+      </label>
+      <label>Smerte/skade 0-10 <input id="painInput" type="number" min="0" max="10" step="1" /></label>
+      <label>Træthed 0-10 <input id="fatigueInput" type="number" min="0" max="10" step="1" /></label>
+      <label>Udstyr/sted <select id="equipmentSelect"></select></label>
+      <label>Noter <textarea id="notesInput" rows="3"></textarea></label>
+      <div class="dialog-actions edit-actions"><button id="deleteWorkoutBtn" type="button" class="danger">Slet denne træning</button><span class="dialog-spacer"></span><button value="cancel" class="secondary">Annullér</button><button id="saveWorkoutBtn" value="default">Gem ændringer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="manualWorkoutDialog">
+    <form method="dialog" id="manualWorkoutForm">
+      <h3>Tilføj manuel træning</h3>
+      <p class="hint">Brug denne, når du har lavet en ekstra træning, gåtur, erstatningstræning eller et pas, der ikke allerede findes i planen.</p>
+      <label>Dato <input id="manualDate" type="date" required /></label>
+      <label>Disciplin
+        <select id="manualDiscipline">
+          <option>Svøm</option><option>Cykling</option><option>Løb</option><option>Styrke</option><option>Restitution</option><option>Race</option><option>Andet</option>
+        </select>
+      </label>
+      <label>Titel <input id="manualTitle" placeholder="Fx Ekstra roligt løb" required /></label>
+      <label>Intensitet <input id="manualIntensity" placeholder="Fx Z1-Z2 / RPE 3-4" /></label>
+      <label>Faktisk tid, minutter <input id="manualActualMinutes" type="number" min="0" step="1" /></label>
+      <label>Faktisk distance, km <input id="manualActualKm" type="number" min="0" step="0.1" /></label>
+      <label>Gns. puls <input id="manualAvgHr" type="number" min="0" step="1" /></label>
+      <label>Maks puls <input id="manualMaxHr" type="number" min="0" step="1" /></label>
+      <label>Status
+        <select id="manualStatus"><option>Gennemført</option><option>Delvist gennemført</option><option>Planlagt</option><option>Sprunget over</option><option>Skadet/syg</option><option>Flyttet</option></select>
+      </label>
+      <label>RPE <input id="manualRpe" type="number" min="1" max="10" step="1" /></label>
+      <label>Udstyr/sted <select id="manualEquipmentSelect"></select></label>
+      <label>Noter <textarea id="manualNotes" rows="3"></textarea></label>
+      <div class="dialog-actions"><button value="cancel" class="secondary">Annullér</button><button id="saveManualWorkoutBtn" value="default">Gem manuel træning</button></div>
+    </form>
+  </dialog>
+
+
+  <dialog id="backupDialog">
+    <form method="dialog">
+      <h3>Backup</h3>
+      <p class="hint">Vælg om du vil gemme en backup af appens data eller indlæse en tidligere backup.</p>
+      <div class="backup-actions">
+        <button id="exportJsonBtn" type="button">Eksportér backup</button>
+        <label class="file-btn">Importér backup<input id="importJsonInput" type="file" accept="application/json,.json" /></label>
+      </div>
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary">Luk</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="aiUpdateDialog" class="wide-dialog">
+    <form method="dialog" id="aiUpdateForm">
+      <h3>AI-genberegning af planen</h3>
+      <p class="hint">Knappen kan ikke sende dine data automatisk til ChatGPT fra en lokal browserfil, men den laver en færdig opdateringspakke og prompt, som du kan uploade her i chatten. Så kan jeg genberegne resten af planen ud fra dine faktiske træninger, missede pas, sygdom eller belastning.</p>
+      <label>Genberegn fra dato
+        <input id="recalcFromDate" type="date" />
+      </label>
+      <label>Ekstra besked til mig
+        <textarea id="aiExtraMessage" rows="4" placeholder="Fx: Jeg missede to løbepas pga. øm achilles. Skru lidt ned for løb de næste 2 uger."></textarea>
+      </label>
+      <label>Prompt til ChatGPT
+        <textarea id="aiPromptOutput" rows="10" readonly></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button id="buildAiPromptBtn" type="button" class="secondary">Lav prompt</button>
+        <button id="copyAiPromptBtn" type="button" class="secondary">Kopiér prompt</button>
+        <button id="downloadAiPackageBtn" type="button">Download opdateringspakke</button>
+        <button id="openChatGptBtn" type="button" class="update-btn">Åbn ChatGPT</button>
+        <button value="cancel" class="secondary">Luk</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="fitImportDialog" class="wide-dialog">
+    <form method="dialog">
+      <h3 id="importDialogTitle">Træningsfil-import</h3>
+      <p class="hint">Importer en .fit, .tcx eller .gpx-fil fra fx Garmin. Appen læser dato, sportstype, tid, distance og puls hvor data findes, og kan automatisk udfylde den mest sandsynlige træning på samme dato.</p>
+      <div id="fitImportResult" class="fit-result"></div>
+      <div class="dialog-actions">
+        <button id="applyFitImportBtn" type="button">Brug på træningsplan</button>
+        <button value="cancel" class="secondary">Luk</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+
+
+<script>
+(function(){
+  const STORAGE_KEY_FALLBACK = 'jl_triathlon_plan_v6_sub12';
+  const PLAN_START = '2026-08-17';
+  const FIRST_RACE_DATE = '2027-05-09';
+
+  function key(){ return STORAGE_KEY_FALLBACK; }
+  function today(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function addDays(iso, days){
+    const d = new Date(String(iso)+'T00:00:00');
+    d.setDate(d.getDate()+days);
+    return d.toISOString().slice(0,10);
+  }
+  function daysBetween(a,b){
+    const da = new Date(String(a)+'T00:00:00');
+    const db = new Date(String(b)+'T00:00:00');
+    return Math.round((db-da)/(24*3600*1000));
+  }
+  function weeksBetween(a,b){
+    return Math.max(0.1, daysBetween(a,b)/7);
+  }
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+  function dkDateSafe(iso){
+    if(typeof dkDate === 'function') return dkDate(iso);
+    if(!iso) return '';
+    const [y,m,d] = String(iso).split('-');
+    return `${d}.${m}.${y}`;
+  }
+  function num(v){
+    if(v === undefined || v === null || v === '') return 0;
+    return Number(String(v).replace(',', '.')) || 0;
+  }
+  function getState(){
+    try{
+      if(typeof state !== 'undefined' && state && Array.isArray(state.workouts)) return state;
+    }catch(e){}
+    try{ return JSON.parse(localStorage.getItem(key()) || '{}'); }
+    catch(e){ return {}; }
+  }
+  function setState(s){
+    if(!s || typeof s !== 'object') return;
+    ensure(s);
+    try{
+      if(typeof state !== 'undefined' && state){ Object.assign(state, s); }
+    }catch(e){}
+    try{ localStorage.setItem(key(), JSON.stringify(s)); }catch(e){}
+    try{ if(typeof save === 'function') save(); }catch(e){}
+  }
+  function ensure(s){
+    if(!s.weightData) s.weightData = {};
+    if(!Array.isArray(s.weightData.log)) s.weightData.log = [];
+    if(s.weightData.targetDate === undefined) s.weightData.targetDate = FIRST_RACE_DATE;
+    if(s.weightData.maxLossPerWeek === undefined) s.weightData.maxLossPerWeek = 0.5;
+    if(s.weightData.strategy === undefined) s.weightData.strategy = 'balanced';
+    if(s.weightData.useInPlan === undefined) s.weightData.useInPlan = true;
+
+    if(s.weight && !s.weightData.log.length && !s.weightData.start){
+      s.weightData.start = s.weight.start || '';
+      s.weightData.target = s.weight.target || '';
+      s.weightData.targetDate = s.weight.targetDate || s.weightData.targetDate || FIRST_RACE_DATE;
+      s.weightData.maxLossPerWeek = s.weight.maxLossPerWeek || s.weightData.maxLossPerWeek || 0.5;
+      s.weightData.strategy = s.weight.strategy || s.weightData.strategy || 'balanced';
+      s.weightData.useInPlan = s.weight.useInPlan !== false;
+      s.weightData.log = Array.isArray(s.weight.entries) ? s.weight.entries.map(e=>({id:e.id||`w_${Date.now()}`, date:e.date, weight:e.weight})) : [];
+    }
+    return s;
+  }
+  function status(text){
+    const el = document.getElementById('weightDebugStatus');
+    if(el) el.textContent = 'Status: ' + text;
+  }
+  function latest(s){
+    ensure(s);
+    const rows = [...s.weightData.log].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return rows.length ? rows[rows.length-1] : null;
+  }
+  function expectedWeightOn(s, iso){
+    ensure(s);
+    const start = num(s.weightData.start);
+    const target = num(s.weightData.target);
+    const targetDate = s.weightData.targetDate || FIRST_RACE_DATE;
+    if(!start || !target || target >= start) return 0;
+
+    const totalDays = Math.max(1, daysBetween(PLAN_START, targetDate));
+    const elapsed = clamp(daysBetween(PLAN_START, iso), 0, totalDays);
+    const progress = elapsed / totalDays;
+    return start - ((start-target) * progress);
+  }
+  function planMetrics(s){
+    ensure(s);
+    const start = num(s.weightData.start);
+    const target = num(s.weightData.target);
+    const targetDate = s.weightData.targetDate || FIRST_RACE_DATE;
+    const maxLoss = num(s.weightData.maxLossPerWeek) || 0.5;
+    const l = latest(s);
+    const current = l ? num(l.weight) : start;
+    const currentDate = l ? l.date : today();
+
+    if(!start || !target || target >= start){
+      return {valid:false, text:'Indtast startvægt og en lavere målvægt.', severity:'warn'};
+    }
+
+    const totalLoss = start-target;
+    const totalWeeks = weeksBetween(PLAN_START, targetDate);
+    const plannedPerWeek = totalLoss / totalWeeks;
+    const remainingLoss = Math.max(0, current-target);
+    const remainingWeeks = weeksBetween(currentDate, targetDate);
+    const neededPerWeek = remainingLoss / remainingWeeks;
+    const expected = expectedWeightOn(s, currentDate);
+    const diff = current - expected;
+
+    let severity = 'ok';
+    let text = 'Planen ser realistisk ud.';
+    if(plannedPerWeek > maxLoss){
+      severity = 'danger';
+      text = `Planen kræver ca. ${plannedPerWeek.toFixed(2)} kg/uge fra start til mål. Det er over dit max på ${maxLoss.toFixed(1)} kg/uge.`;
+    } else if(neededPerWeek > maxLoss){
+      severity = 'danger';
+      text = `For at nå målet kræver resten ca. ${neededPerWeek.toFixed(2)} kg/uge. Det er for aggressivt.`;
+    } else if(neededPerWeek > 0.5){
+      severity = 'warn';
+      text = `Resten kræver ca. ${neededPerWeek.toFixed(2)} kg/uge. Det er muligt, men kræver god restitution.`;
+    } else if(diff > 0.7){
+      severity = 'warn';
+      text = `Du er ca. ${diff.toFixed(1)} kg bagud i forhold til vægtkurven, men planen er stadig inden for grænsen.`;
+    } else if(diff < -0.7){
+      severity = 'ok';
+      text = `Du er ca. ${Math.abs(diff).toFixed(1)} kg foran vægtkurven. Pas på ikke at tabe dig for hurtigt.`;
+    }
+
+    return {valid:true, start, target, targetDate, maxLoss, current, currentDate, expected, diff, totalLoss, totalWeeks, plannedPerWeek, remainingLoss, remainingWeeks, neededPerWeek, severity, text};
+  }
+  function factor(s){
+    ensure(s);
+    if(s.weightData.useInPlan === false) return {run:1, bike:1, text:'vægtjustering slået fra'};
+    const m = planMetrics(s);
+    if(!m.valid) return {run:1, bike:1, text:'normal progression'};
+    if(m.current <= m.target) return {run:1, bike:1, text:'normal progression'};
+
+    const remainingRatio = clamp((m.current-m.target)/(m.start-m.target),0,1);
+    const behindKg = Math.max(0, m.diff || 0);
+    const tooAggressive = m.neededPerWeek > m.maxLoss;
+    const strategy = s.weightData.strategy || 'balanced';
+
+    let runCut = 0.10 * remainingRatio + 0.04 * behindKg;
+    let bikeCut = 0.04 * remainingRatio + 0.02 * behindKg;
+
+    if(strategy === 'conservative'){ runCut += 0.04; bikeCut += 0.02; }
+    if(strategy === 'race'){
+      const daysToRace = daysBetween(m.currentDate, m.targetDate);
+      if(daysToRace <= 28){ runCut += 0.04; bikeCut += 0.02; }
+    }
+    if(tooAggressive){ runCut += 0.05; bikeCut += 0.03; }
+
+    runCut = Math.min(0.28, Math.max(0, runCut));
+    bikeCut = Math.min(0.14, Math.max(0, bikeCut));
+
+    const run = 1-runCut;
+    const bike = 1-bikeCut;
+
+    let trend = 'på sporet';
+    if(m.diff > 0.7) trend = `bagud ${m.diff.toFixed(1)} kg`;
+    if(m.diff < -0.7) trend = `foran ${Math.abs(m.diff).toFixed(1)} kg`;
+
+    return {
+      run, bike,
+      text:`${trend} · løb ${(run*100).toFixed(0)}% · cykel ${(bike*100).toFixed(0)}%`
+    };
+  }
+  function milestones(s){
+    ensure(s);
+    const start = num(s.weightData.start);
+    const target = num(s.weightData.target);
+    const targetDate = s.weightData.targetDate || FIRST_RACE_DATE;
+    if(!start || !target || target >= start) return [];
+
+    const rows = [];
+    let d = PLAN_START;
+    while(d < targetDate && rows.length < 14){
+      d = addDays(d, 28);
+      if(d > targetDate) d = targetDate;
+      const expected = expectedWeightOn(s, d);
+      const actual = closestActualWeight(s, d);
+      let st = 'Kommende';
+      if(actual){
+        const delta = num(actual.weight)-expected;
+        if(delta > 0.7) st = `Bagud ${delta.toFixed(1)} kg`;
+        else if(delta < -0.7) st = `Foran ${Math.abs(delta).toFixed(1)} kg`;
+        else st = 'På sporet';
+      }
+      rows.push({date:d, expected, status:st});
+      if(d === targetDate) break;
+    }
+    return rows;
+  }
+  function closestActualWeight(s, iso){
+    const rows = [...(s.weightData.log||[])].filter(r=>r.date <= iso).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return rows.length ? rows[rows.length-1] : null;
+  }
+  function draw(s){
+    const c = document.getElementById('weightChart');
+    if(!c) return;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+    const rows = [...s.weightData.log].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const ms = milestones(s);
+    const vals = rows.map(r=>num(r.weight)).filter(Boolean).concat(ms.map(x=>x.expected).filter(Boolean));
+    const start = num(s.weightData.start), target = num(s.weightData.target);
+    if(start) vals.push(start);
+    if(target) vals.push(target);
+    ctx.font='14px system-ui';
+    if(!vals.length){
+      ctx.fillText('Indtast og gem en vægtmåling for at se kurven.',20,40);
+      return;
+    }
+    const pad={l:45,r:20,t:20,b:35}, W=c.width-pad.l-pad.r, H=c.height-pad.t-pad.b;
+    const min=Math.floor(Math.min(...vals)-1), max=Math.ceil(Math.max(...vals)+1);
+    const y=v=>pad.t+(max-v)/(max-min||1)*H;
+    const xForDate=iso=>{
+      const total=Math.max(1, daysBetween(PLAN_START, s.weightData.targetDate || FIRST_RACE_DATE));
+      return pad.l + clamp(daysBetween(PLAN_START, iso)/total,0,1)*W;
+    };
+    ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+H); ctx.lineTo(pad.l+W,pad.t+H); ctx.stroke();
+    ctx.fillStyle='#64748b'; ctx.fillText(max+' kg',4,y(max)+4); ctx.fillText(min+' kg',4,y(min)+4);
+
+    if(ms.length){
+      ctx.setLineDash([6,5]); ctx.strokeStyle='#94a3b8'; ctx.lineWidth=2; ctx.beginPath();
+      ms.forEach((m,i)=>{ const xx=xForDate(m.date), yy=y(m.expected); if(i===0) ctx.moveTo(pad.l,y(start)); ctx.lineTo(xx,yy); });
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(rows.length){
+      ctx.strokeStyle='#2563eb'; ctx.lineWidth=3; ctx.beginPath();
+      rows.forEach((r,i)=>{ const xx=xForDate(r.date), yy=y(num(r.weight)); if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
+      ctx.stroke();
+      ctx.fillStyle='#2563eb';
+      rows.forEach(r=>{ ctx.beginPath(); ctx.arc(xForDate(r.date),y(num(r.weight)),5,0,Math.PI*2); ctx.fill(); });
+    }
+  }
+  function render(){
+    const s = ensure(getState());
+    const l = latest(s);
+    const startEl = document.getElementById('weightStart');
+    if(!startEl) return;
+
+    if(document.activeElement !== startEl) startEl.value = s.weightData.start || '';
+    const targetEl = document.getElementById('weightTarget');
+    if(targetEl && document.activeElement !== targetEl) targetEl.value = s.weightData.target || '';
+    const targetDateEl = document.getElementById('weightTargetDate');
+    if(targetDateEl && !targetDateEl.value) targetDateEl.value = s.weightData.targetDate || FIRST_RACE_DATE;
+    const maxLossEl = document.getElementById('weightMaxLoss');
+    if(maxLossEl && !maxLossEl.value) maxLossEl.value = s.weightData.maxLossPerWeek || 0.5;
+    const strategyEl = document.getElementById('weightStrategy');
+    if(strategyEl) strategyEl.value = s.weightData.strategy || 'balanced';
+    const dateEl = document.getElementById('weightDate');
+    if(dateEl && !dateEl.value) dateEl.value = today();
+    const currentEl = document.getElementById('weightCurrent');
+    if(currentEl && !currentEl.value && l) currentEl.value = l.weight;
+    const useEl = document.getElementById('weightUseInPlan');
+    if(useEl) useEl.value = s.weightData.useInPlan === false ? 'no' : 'yes';
+
+    const m = planMetrics(s);
+    const f = factor(s);
+    const cards = document.getElementById('weightStatusCards');
+    const start = num(s.weightData.start), target = num(s.weightData.target), current = l ? num(l.weight) : start;
+    const total = start && target ? start-target : 0;
+    const lost = start && current ? start-current : 0;
+    const pct = total > 0 ? clamp(lost/total*100,0,100) : 0;
+
+    if(cards){
+      cards.innerHTML = `
+        <div class="weight-stat"><span>Start</span><strong>${start ? start.toFixed(1)+' kg' : '—'}</strong></div>
+        <div class="weight-stat"><span>Aktuel</span><strong>${current ? current.toFixed(1)+' kg' : '—'}</strong></div>
+        <div class="weight-stat"><span>Mål</span><strong>${target ? target.toFixed(1)+' kg' : '—'}</strong></div>
+        <div class="weight-stat"><span>Mod mål</span><strong>${Math.round(pct)}%</strong></div>
+        <div class="weight-stat"><span>Måldato</span><strong>${dkDateSafe(s.weightData.targetDate || FIRST_RACE_DATE)}</strong></div>
+        <div class="weight-stat"><span>Behov pr. uge</span><strong>${m.valid ? m.neededPerWeek.toFixed(2)+' kg' : '—'}</strong></div>
+        <div class="weight-stat wide"><span>Planjustering</span><strong>${f.text}</strong></div>`;
+    }
+
+    const advice = document.getElementById('weightPlanAdvice');
+    if(advice){
+      const cls = m.severity === 'danger' ? 'danger' : m.severity === 'warn' ? 'warn' : 'ok';
+      advice.innerHTML = `<div class="advice-box ${cls}">
+        <strong>${m.valid ? m.text : 'Indtast vægtplan'}</strong>
+        <p>${m.valid ? `Planlagt vægttab: ${m.plannedPerWeek.toFixed(2)} kg/uge fra start. Restbehov: ${m.neededPerWeek.toFixed(2)} kg/uge. Max valgt: ${m.maxLoss.toFixed(1)} kg/uge.` : 'Start med startvægt, målvægt, måldato og aktuel vægt.'}</p>
+        <p>${m.severity === 'danger' ? 'Appen vil ikke forsøge at “løse” et for aggressivt vægttab med hårdere træning. Den gør i stedet opbygningen mere skånsom og viser, at kost/restitution skal justeres.' : 'Målet er at tabe vægt uden at øge skadesrisikoen eller ødelægge energien til træning.'}</p>
+      </div>`;
+    }
+
+    const mtbody = document.querySelector('#weightMilestoneTable tbody');
+    if(mtbody){
+      mtbody.innerHTML = milestones(s).map(x=>`<tr><td>${dkDateSafe(x.date)}</td><td>${x.expected.toFixed(1)} kg</td><td>${x.status}</td></tr>`).join('');
+    }
+
+    const tbody = document.querySelector('#weightLogTable tbody');
+    if(tbody){
+      const rows = [...s.weightData.log].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+      tbody.innerHTML = rows.map(r=>{
+        const w = num(r.weight);
+        return `<tr>
+          <td>${dkDateSafe(r.date)}</td>
+          <td>${w.toFixed(1)} kg</td>
+          <td>${start ? (w-start).toFixed(1)+' kg' : '—'}</td>
+          <td>${target ? (w-target).toFixed(1)+' kg' : '—'}</td>
+          <td><button class="danger mini" type="button" data-weight-delete="${r.id}">Slet</button></td>
+        </tr>`;
+      }).join('');
+    }
+    draw(s);
+  }
+  function readForm(requireCurrent){
+    const s = ensure(getState());
+    const start = num(document.getElementById('weightStart')?.value);
+    const target = num(document.getElementById('weightTarget')?.value);
+    const targetDate = document.getElementById('weightTargetDate')?.value || FIRST_RACE_DATE;
+    const current = num(document.getElementById('weightCurrent')?.value);
+    const date = document.getElementById('weightDate')?.value || today();
+    const maxLoss = num(document.getElementById('weightMaxLoss')?.value) || 0.5;
+    const strategy = document.getElementById('weightStrategy')?.value || 'balanced';
+    const use = (document.getElementById('weightUseInPlan')?.value || 'yes') === 'yes';
+
+    if(start && target && target >= start){
+      alert('Målvægten skal være lavere end startvægten.');
+      status('målvægt skal være lavere end startvægt');
+      return null;
+    }
+    if(requireCurrent && !current){
+      alert('Indtast aktuel vægt.');
+      status('mangler aktuel vægt');
+      return null;
+    }
+    s.weightData.start = start || '';
+    s.weightData.target = target || '';
+    s.weightData.targetDate = targetDate;
+    s.weightData.maxLossPerWeek = maxLoss;
+    s.weightData.strategy = strategy;
+    s.weightData.useInPlan = use;
+
+    if(current){
+      const existing = s.weightData.log.find(r=>r.date===date);
+      if(existing) existing.weight = current;
+      else s.weightData.log.push({id:`wd_${Date.now()}`, date, weight:current});
+      s.weightData.log.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    }
+    return s;
+  }
+  window.__triWeightSave = function(){
+    const s = readForm(true);
+    if(!s) return;
+    setState(s);
+    render();
+    status(`vægt gemt. Loggen har nu ${s.weightData.log.length} måling(er)`);
+  };
+  window.__triWeightRecalc = function(){
+    const s = readForm(false);
+    if(!s) return;
+    if(!num(s.weightData.start) || !num(s.weightData.target) || !s.weightData.targetDate){
+      alert('Indtast startvægt, målvægt og måldato først.');
+      status('mangler startvægt/målvægt/måldato');
+      return;
+    }
+    if(typeof generatePlan !== 'function'){
+      setState(s); render();
+      status('vægten er gemt, men generatePlan blev ikke fundet');
+      alert('Vægten er gemt, men planen kunne ikke genberegnes.');
+      return;
+    }
+    const f = factor(s);
+    const todayIsoVal = typeof todayIso === 'function' ? todayIso() : today();
+    const before = Array.isArray(s.workouts) ? [...s.workouts] : [];
+    const preserve = new Map(before.map(w=>[w.id,{
+      actualMinutes:w.actualMinutes || '', actualKm:w.actualKm || '', avgHr:w.avgHr || '', maxHr:w.maxHr || '',
+      status:w.status || 'Planlagt', rpe:w.rpe || '', equipment:w.equipment || '', notes:w.notes || ''
+    }]));
+    const fresh = generatePlan().map(w=>{
+      const out = {...w, ...(preserve.get(w.id) || {})};
+      const hasActual = Number(out.actualMinutes)>0 || Number(out.actualKm)>0 || out.status==='Gennemført' || out.status==='Delvist gennemført';
+      if(out.date >= todayIsoVal && !hasActual && out.status === 'Planlagt'){
+        if(out.discipline === 'Løb' && f.run < 1){
+          out.planMinutes = Math.max(15, Math.round(Number(out.planMinutes||0)*f.run));
+          out.planKm = Math.round(Number(out.planKm||0)*f.run*10)/10;
+          if(!String(out.intensity).includes('vægtjusteret')) out.intensity = `${out.intensity || ''} · vægtjusteret`;
+        }
+        if(out.discipline === 'Cykling' && f.bike < 1){
+          out.planMinutes = Math.max(25, Math.round(Number(out.planMinutes||0)*f.bike));
+          out.planKm = Math.round(Number(out.planKm||0)*f.bike*10)/10;
+          if(!String(out.intensity).includes('vægtjusteret')) out.intensity = `${out.intensity || ''} · vægtjusteret`;
+        }
+      }
+      return out;
+    });
+    const freshIds = new Set(fresh.map(w=>w.id));
+    const extras = before.filter(w => !freshIds.has(w.id) && (
+      String(w.id).includes('import') || String(w.id).includes('manuel') ||
+      Number(w.actualMinutes)>0 || Number(w.actualKm)>0 || w.status==='Gennemført' || w.status==='Delvist gennemført'
+    ));
+    s.workouts = [...fresh, ...extras].sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.discipline).localeCompare(String(b.discipline)));
+    setState(s);
+    try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
+    render();
+    const m = planMetrics(s);
+    const msg = `plan genberegnet med ${f.text}. ${m.valid ? m.text : ''}`;
+    status(msg);
+    alert(msg);
+  };
+  document.addEventListener('click', function(e){
+    const del = e.target && e.target.closest && e.target.closest('[data-weight-delete]');
+    if(del){
+      const s = ensure(getState());
+      s.weightData.log = s.weightData.log.filter(r=>r.id !== del.dataset.weightDelete);
+      setState(s); render(); status('vægtmåling slettet');
+    }
+    if(e.target && e.target.id === 'weightSaveBtn'){ e.preventDefault(); window.__triWeightSave(); }
+    if(e.target && e.target.id === 'weightRecalcBtn'){ e.preventDefault(); window.__triWeightRecalc(); }
+  }, true);
+  setTimeout(render, 0);
+  setTimeout(render, 500);
+})();
+</script>
+
+
+  <dialog id="equipmentDialog">
+    <form method="dialog" class="dialog-form">
+      <h3>Rediger udstyr/sted</h3>
+      <input id="equipmentEditOriginal" type="hidden" />
+      <label>Navn
+        <input id="equipmentEditName" />
+      </label>
+      <label>Type
+        <select id="equipmentEditType">
+          <option>Cykel</option>
+          <option>Løbesko</option>
+          <option>Svømning</option>
+          <option>Styrke</option>
+          <option>Andet</option>
+        </select>
+      </label>
+      <p class="hint">Når du ændrer navnet, opdateres tidligere og fremtidige træninger automatisk, så dine data ikke mistes.</p>
+      <div class="dialog-actions">
+        <button type="button" id="saveEquipmentEditBtn">Gem ændringer</button>
+        <button type="button" class="secondary" id="cancelEquipmentEditBtn">Annuller</button>
+      </div>
+    </form>
+  </dialog>
+
+
+
+<script>
+(function(){
+  const API = '/.netlify/functions';
+
+  function pin(){
+    const v = document.getElementById('stravaPinInput')?.value || localStorage.getItem('tri_strava_pin') || '';
+    if(v) localStorage.setItem('tri_strava_pin', v);
+    return v;
+  }
+  function withPin(url){
+    const p = pin();
+    if(!p) return url;
+    return url + (url.includes('?') ? '&' : '?') + 'pin=' + encodeURIComponent(p);
+  }
+  function log(msg){
+    const box = document.getElementById('stravaLogBox');
+    const line = `[${new Date().toLocaleTimeString()}] ${typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)}`;
+    if(box) box.textContent = line + '\n' + (box.textContent || '');
+  }
+  function status(msg, cls){
+    const box = document.getElementById('stravaStatusBox');
+    if(box){
+      box.className = 'strava-status-box ' + (cls || '');
+      box.textContent = msg;
+    }
+  }
+  async function getJson(url, options){
+    const headers = {'Content-Type':'application/json'};
+    const p = pin();
+    if(p) headers['x-app-pin'] = p;
+    const res = await fetch(withPin(url), {...(options || {}), headers:{...headers, ...((options||{}).headers||{})}});
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = {raw:text}; }
+    if(!res.ok) throw new Error(`${res.status} ${res.statusText}: ${text}`);
+    return data;
+  }
+  function km(a){ return Math.round(((a.distance || a.distanceMeters || 0)/1000)*100)/100; }
+  function min(a){ return Math.round((a.moving_time || a.movingTimeSeconds || a.elapsed_time || a.elapsedTimeSeconds || 0)/60); }
+  function dateOnly(a){ return String(a.start_date_local || a.start_date || a.startDate || '').slice(0,10); }
+  function discipline(a){
+    const t = String(a.sport_type || a.type || '').toLowerCase();
+    if(t.includes('run')) return 'Løb';
+    if(t.includes('ride') || t.includes('bike') || t.includes('cycling')) return 'Cykling';
+    if(t.includes('swim')) return 'Svøm';
+    if(t.includes('walk') || t.includes('hike')) return 'Løb';
+    return 'Andet';
+  }
+  function renderActivities(list){
+    const tbody = document.querySelector('#stravaActivityTable tbody');
+    if(!tbody) return;
+    tbody.innerHTML = (list || []).slice(0,80).map(a=>{
+      const d = dateOnly(a);
+      const hr = [a.average_heartrate || a.averageHeartRate, a.max_heartrate || a.maxHeartRate].filter(Boolean).join(' / ');
+      const watts = a.average_watts || a.weighted_average_watts || a.averageWatts || '';
+      let match = '';
+      try {
+        if(typeof state !== 'undefined' && Array.isArray(state.workouts)){
+          const m = state.workouts.find(w => w.date === d && w.discipline === discipline(a));
+          match = m ? m.title : 'Ny aktivitet';
+        }
+      } catch(e) { match = ''; }
+      return `<tr>
+        <td>${d}</td><td>${discipline(a)}</td><td>${a.name || ''}</td>
+        <td>${km(a)} km</td><td>${min(a)} min</td><td>${hr || '-'}</td><td>${watts || '-'}</td><td>${match}</td>
+      </tr>`;
+    }).join('');
+  }
+  async function loadActivities(){
+    const data = await getJson(API + '/strava-activities');
+    renderActivities(data.activities || []);
+    return data.activities || [];
+  }
+
+  window.__stravaDirectStatus = async function(){
+    try{
+      status('Tjekker status...');
+      const data = await getJson(API + '/strava-status');
+      log(data);
+      if(data.connected) status(`Forbundet til Strava: ${data.athleteName || data.athleteId || 'ukendt'}`, 'ok');
+      else status('Netlify Functions virker, men Strava er ikke forbundet.', 'warn');
+    }catch(e){
+      status('Status fejlede. Tjek environment variables på Netlify.', 'bad');
+      log(e.message);
+    }
+  };
+
+  window.__stravaDirectSync = async function(){
+    try{
+      status('Synkroniserer fra Strava. Det kan tage lidt tid...');
+      const data = await getJson(API + '/strava-sync?days=365', {method:'POST', body:JSON.stringify({days:365})});
+      log(data);
+      status(`Synk færdig: ${data.count || 0} aktiviteter.`, 'ok');
+      await loadActivities();
+    }catch(e){
+      status('Synk fejlede. Se teknisk log.', 'bad');
+      log(e.message);
+    }
+  };
+
+  window.__stravaDirectImport = async function(){
+    try{
+      status('Importerer aktiviteter til app...');
+      const activities = await loadActivities();
+      if(typeof state === 'undefined' || !Array.isArray(state.workouts)){
+        status('Kunne ikke finde appens state/workouts.', 'bad');
+        return;
+      }
+      let matched = 0, created = 0;
+      activities.forEach(a=>{
+        const d = dateOnly(a);
+        const disc = discipline(a);
+        if(!d || disc === 'Andet') return;
+        let w = state.workouts.find(x => x.date === d && x.discipline === disc);
+        if(w) matched++;
+        else {
+          created++;
+          w = {
+            id:`strava_${a.id || Date.now()}_${disc}`,
+            date:d,
+            day: typeof dayName === 'function' ? dayName(d) : '',
+            week: typeof weekNo === 'function' ? weekNo(d) : '',
+            discipline:disc,
+            title:a.name || 'Strava aktivitet',
+            intensity:'Importeret fra Strava',
+            planMinutes:'',
+            planKm:'',
+            actualMinutes:'',
+            actualKm:'',
+            avgHr:'',
+            maxHr:'',
+            status:'Planlagt',
+            rpe:'',
+            equipment:'',
+            notes:''
+          };
+          state.workouts.push(w);
+        }
+        w.actualMinutes = min(a) || w.actualMinutes || '';
+        w.actualKm = km(a) || w.actualKm || '';
+        w.avgHr = a.average_heartrate || a.averageHeartRate || w.avgHr || '';
+        w.maxHr = a.max_heartrate || a.maxHeartRate || w.maxHr || '';
+        w.status = 'Gennemført';
+        w.stravaId = a.id || '';
+        w.stravaType = a.sport_type || a.type || '';
+        w.stravaRawSummary = a;
+        w.notes = `${w.notes ? w.notes + ' | ' : ''}Strava ID: ${a.id || ''}. ${a.name || ''}`;
+      });
+      state.workouts.sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.discipline).localeCompare(String(b.discipline)));
+      if(typeof save === 'function') save();
+      if(typeof renderAll === 'function') renderAll();
+      status(`Import færdig: ${matched} matchet, ${created} nye.`, 'ok');
+    }catch(e){
+      status('Import fejlede. Se log.', 'bad');
+      log(e.message);
+    }
+  };
+
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.id === 'stravaStatusBtn'){ e.preventDefault(); window.__stravaDirectStatus(); }
+    if(e.target && e.target.id === 'stravaSyncBtn'){ e.preventDefault(); window.__stravaDirectSync(); }
+    if(e.target && e.target.id === 'stravaImportBtn'){ e.preventDefault(); window.__stravaDirectImport(); }
+  }, true);
+
+  setTimeout(function(){
+    const p = localStorage.getItem('tri_strava_pin');
+    const input = document.getElementById('stravaPinInput');
+    if(input && p) input.value = p;
+    if(document.getElementById('stravaStatusBox')) log('Netlify Strava-knapper er indlæst.');
+  }, 300);
+})();
+</script>
+
+</body>
+</html>
