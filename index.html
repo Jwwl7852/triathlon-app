@@ -553,24 +553,7 @@
       <div class="dialog-actions"><button value="cancel" class="secondary">Annullér</button><button id="saveManualWorkoutBtn" value="default">Gem manuel træning</button></div>
     </form>
   </dialog>
-
-
-
-  <dialog id="stravaActivityDialog" class="wide-dialog activity-detail-dialog ui-hidden">
-    <form method="dialog">
-      <div class="activity-detail-head">
-        <div>
-          <h3 id="activityDetailTitle">Aktivitet</h3>
-          <p id="activityDetailSubtitle" class="hint"></p>
-        </div>
-        <button value="cancel" class="secondary">Luk</button>
-      </div>
-      <div id="activityDetailContent" class="activity-detail-content"></div>
-    </form>
-  </dialog>
-
-
-  <dialog id="backupDialog">
+<dialog id="backupDialog">
     <form method="dialog">
       <h3>Backup</h3>
       <p class="hint">Vælg om du vil gemme en backup af appens data eller indlæse en tidligere backup.</p>
@@ -1075,405 +1058,6 @@
     </form>
   </dialog>
 
-
-
-<script>
-(function(){
-  const API = '/.netlify/functions';
-
-  function pin(){
-    const v = document.getElementById('stravaPinInput')?.value || localStorage.getItem('tri_strava_pin') || '';
-    if(v) localStorage.setItem('tri_strava_pin', v);
-    return v;
-  }
-  function withPin(url){
-    const p = pin();
-    if(!p) return url;
-    return url + (url.includes('?') ? '&' : '?') + 'pin=' + encodeURIComponent(p);
-  }
-  function log(msg){
-    const box = document.getElementById('stravaLogBox');
-    const line = `[${new Date().toLocaleTimeString()}] ${typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)}`;
-    if(box) box.textContent = line + '\n' + (box.textContent || '');
-  }
-  function status(msg, cls){
-    const box = document.getElementById('stravaStatusBox');
-    if(box){
-      box.className = 'strava-status-box ' + (cls || '');
-      box.textContent = msg;
-    }
-  }
-  async function getJson(url, options){
-    const headers = {'Content-Type':'application/json'};
-    const p = pin();
-    if(p) headers['x-app-pin'] = p;
-    const res = await fetch(withPin(url), {...(options || {}), headers:{...headers, ...((options||{}).headers||{})}});
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = {raw:text}; }
-    if(!res.ok) throw new Error(`${res.status} ${res.statusText}: ${text}`);
-    return data;
-  }
-  function km(a){ return Math.round(((a.distance || a.distanceMeters || 0)/1000)*100)/100; }
-  function min(a){ return Math.round((a.moving_time || a.movingTimeSeconds || a.elapsed_time || a.elapsedTimeSeconds || 0)/60); }
-  function dateOnly(a){ return String(a.start_date_local || a.start_date || a.startDate || '').slice(0,10); }
-  function discipline(a){
-    const t = String(a.sport_type || a.type || '').toLowerCase();
-    if(t.includes('run')) return 'Løb';
-    if(t.includes('ride') || t.includes('bike') || t.includes('cycling')) return 'Cykling';
-    if(t.includes('swim')) return 'Svøm';
-    if(t.includes('walk') || t.includes('hike')) return 'Løb';
-    return 'Andet';
-  }
-  function renderActivities(list){
-    window.__lastStravaActivities = list || [];
-    const tbody = document.querySelector('#stravaActivityTable tbody');
-    if(!tbody) return;
-    tbody.innerHTML = (list || []).slice(0,80).map(a=>{
-      const d = dateOnly(a);
-      const hr = [a.average_heartrate || a.averageHeartRate, a.max_heartrate || a.maxHeartRate].filter(Boolean).join(' / ');
-      const watts = a.average_watts || a.weighted_average_watts || a.averageWatts || '';
-      let match = '';
-      try {
-        if(typeof state !== 'undefined' && Array.isArray(state.workouts)){
-          const m = state.workouts.find(w => w.date === d && w.discipline === discipline(a));
-          match = m ? m.title : 'Ny aktivitet';
-        }
-      } catch(e) { match = ''; }
-      return `<tr>
-        <td>${d}</td><td>${discipline(a)}</td><td>${a.name || ''}</td>
-        <td>${km(a)} km</td><td>${min(a)} min</td><td>${hr || '-'}</td><td>${watts || '-'}</td><td>${match}</td>
-      </tr>`;
-    }).join('');
-  }
-  async function loadActivities(){
-    const data = await getJson(API + '/strava-activities');
-    renderActivities(data.activities || []);
-    return data.activities || [];
-  }
-
-  window.__stravaDirectStatus = async function(){
-    try{
-      status('Tjekker status...');
-      const data = await getJson(API + '/strava-status');
-      log(data);
-      if(data.connected) status(`Forbundet til Strava: ${data.athleteName || data.athleteId || 'ukendt'}`, 'ok');
-      else status('Netlify Functions virker, men Strava er ikke forbundet.', 'warn');
-    }catch(e){
-      status('Status fejlede. Tjek environment variables på Netlify.', 'bad');
-      log(e.message);
-    }
-  };
-
-  async function runStravaSync(days){
-    try{
-      status(`Synkroniserer ${days} dage fra Strava i små bidder...`);
-      let page = 1;
-      const perPage = 2;
-      let totalStored = 0;
-      let totalFetched = 0;
-      let done = false;
-
-      while(!done && page <= 200){
-        status(`Synkroniserer ${days} dage · side ${page} · ${totalFetched} aktiviteter behandlet...`);
-        const data = await getJson(API + `/strava-sync-page?days=${days}&page=${page}&perPage=${perPage}`, {
-          method:'POST',
-          body:JSON.stringify({days,page,perPage})
-        });
-        log(data);
-
-        if(data.rateLimited){
-          status(`Strava rate limit ramt. Vent til ${data.retryAfterText || 'næste 15-minutters vindue'} og tryk synk igen. Gemte aktiviteter indtil nu: ${data.count || totalStored}.`, 'warn');
-          return;
-        }
-
-        totalStored = data.count || totalStored;
-        totalFetched += data.processed || 0;
-        done = !!data.done;
-
-        if(!done) page = data.nextPage || (page + 1);
-
-        // Meget bevidst pause for at skåne Strava API limit.
-        await new Promise(resolve => setTimeout(resolve, 2500));
-      }
-
-      status(`Synk færdig: ${totalStored} aktiviteter gemt. ${totalFetched} aktiviteter behandlet.`, 'ok');
-      await loadActivities();
-    }catch(e){
-      const msg = String(e.message || e);
-      if(msg.includes('429') || msg.toLowerCase().includes('rate limit')){
-        status('Strava rate limit ramt. Vent 15-30 minutter og prøv igen. Brug helst “Synk 30 dage” først.', 'warn');
-      } else {
-        status('Synk fejlede. Se teknisk log.', 'bad');
-      }
-      log(msg);
-    }
-  }
-
-  window.__stravaDirectSyncDays = async function(days){
-    await runStravaSync(days || 30);
-  };
-
-  window.__stravaDirectSync = async function(){
-    await runStravaSync(365);
-  };
-
-
-  window.__stravaDirectImport = async function(){
-    try{
-      status('Importerer aktiviteter til app...');
-      const activities = await loadActivities();
-      if(typeof state === 'undefined' || !Array.isArray(state.workouts)){
-        status('Kunne ikke finde appens state/workouts.', 'bad');
-        return;
-      }
-      let matched = 0, created = 0;
-      activities.forEach(a=>{
-        const d = dateOnly(a);
-        const disc = discipline(a);
-        if(!d || disc === 'Andet') return;
-        let w = state.workouts.find(x => x.date === d && x.discipline === disc);
-        if(w) matched++;
-        else {
-          created++;
-          w = {
-            id:`strava_${a.id || Date.now()}_${disc}`,
-            date:d,
-            day: typeof dayName === 'function' ? dayName(d) : '',
-            week: typeof weekNo === 'function' ? weekNo(d) : '',
-            discipline:disc,
-            title:a.name || 'Strava aktivitet',
-            intensity:'Importeret fra Strava',
-            planMinutes:'',
-            planKm:'',
-            actualMinutes:'',
-            actualKm:'',
-            avgHr:'',
-            maxHr:'',
-            status:'Planlagt',
-            rpe:'',
-            equipment:'',
-            notes:''
-          };
-          state.workouts.push(w);
-        }
-        w.actualMinutes = min(a) || w.actualMinutes || '';
-        w.actualKm = km(a) || w.actualKm || '';
-        w.avgHr = a.average_heartrate || a.averageHeartRate || w.avgHr || '';
-        w.maxHr = a.max_heartrate || a.maxHeartRate || w.maxHr || '';
-        w.status = 'Gennemført';
-        w.stravaId = a.id || '';
-        w.stravaType = a.sport_type || a.type || '';
-        w.stravaRawSummary = a;
-        w.notes = `${w.notes ? w.notes + ' | ' : ''}Strava ID: ${a.id || ''}. ${a.name || ''}`;
-      });
-      state.workouts.sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.discipline).localeCompare(String(b.discipline)));
-      if(typeof save === 'function') save();
-      if(typeof renderAll === 'function') renderAll();
-      status(`Import færdig: ${matched} matchet, ${created} nye.`, 'ok');
-    }catch(e){
-      status('Import fejlede. Se log.', 'bad');
-      log(e.message);
-    }
-  };
-
-  document.addEventListener('click', function(e){
-    if(e.target && e.target.id === 'stravaStatusBtn'){ e.preventDefault(); window.__stravaDirectStatus(); }
-    if(e.target && e.target.id === 'stravaSyncBtn'){ e.preventDefault(); window.__stravaDirectSync(); }
-    if(e.target && e.target.id === 'stravaImportBtn'){ e.preventDefault(); window.__stravaDirectImport(); }
-  }, true);
-
-  setTimeout(function(){
-    const p = localStorage.getItem('tri_strava_pin');
-    const input = document.getElementById('stravaPinInput');
-    if(input && p) input.value = p;
-    if(document.getElementById('stravaStatusBox')) log('Netlify Strava-knapper er indlæst.');
-  }, 300);
-})();
-</script>
-
-
-
-<script>
-(function(){
-  const API = '/.netlify/functions';
-  const AUTO_LAST_KEY = 'tri_strava_auto_last';
-  const AUTO_RUNNING_KEY = 'tri_strava_auto_running';
-
-  function todayStr(){
-    const d = new Date();
-    return d.toISOString().slice(0,10);
-  }
-  function setAutoBox(msg, cls){
-    const box = document.getElementById('stravaAutoSyncBox') || document.getElementById('stravaStatusBox');
-    if(box){
-      box.className = 'strava-status-box ' + (cls || '');
-      box.textContent = msg;
-    }
-  }
-  async function jsonFetch(url, options){
-    const res = await fetch(url, {
-      ...(options || {}),
-      headers:{'Content-Type':'application/json', ...((options||{}).headers||{})}
-    });
-    const text = await res.text();
-    let data;
-    try{ data = JSON.parse(text); }catch(e){ data = {raw:text}; }
-    if(!res.ok) throw Object.assign(new Error(data.error || text || res.statusText), {status:res.status, data});
-    return data;
-  }
-  function discipline(a){
-    const t = String(a.sport_type || a.type || '').toLowerCase();
-    if(t.includes('run')) return 'Løb';
-    if(t.includes('ride') || t.includes('bike') || t.includes('cycling')) return 'Cykling';
-    if(t.includes('swim')) return 'Svøm';
-    if(t.includes('walk') || t.includes('hike')) return 'Løb';
-    return 'Andet';
-  }
-  function dateOnly(a){
-    return String(a.start_date_local || a.start_date || a.startDate || '').slice(0,10);
-  }
-  function km(a){
-    return Math.round(((a.distance || a.distanceMeters || 0)/1000)*100)/100;
-  }
-  function min(a){
-    return Math.round((a.moving_time || a.movingTimeSeconds || a.elapsed_time || a.elapsedTimeSeconds || 0)/60);
-  }
-  function renderActivities(list){
-    window.__lastStravaActivities = list || [];
-    const tbody=document.querySelector('#stravaActivityTable tbody');
-    if(!tbody) return;
-    tbody.innerHTML=(list||[]).slice(0,80).map(a=>{
-      const d=dateOnly(a), disc=discipline(a);
-      const hr=[a.average_heartrate || a.averageHeartRate, a.max_heartrate || a.maxHeartRate].filter(Boolean).join(' / ');
-      const watts=a.average_watts || a.weighted_average_watts || a.averageWatts || '';
-      let match='';
-      try{
-        const m=state.workouts.find(w=>w.date===d && w.discipline===disc);
-        match=m ? m.title : 'Ny aktivitet';
-      }catch(e){}
-      return `<tr><td>${d}</td><td>${disc}</td><td>${a.name||''}</td><td>${km(a)} km</td><td>${min(a)} min</td><td>${hr||'-'}</td><td>${watts||'-'}</td><td>${match}</td></tr>`;
-    }).join('');
-  }
-  async function autoImportActivities(){
-    const data = await jsonFetch(API + '/strava-activities?limit=300');
-    const activities = data.activities || [];
-    renderActivities(activities);
-    if(typeof state === 'undefined' || !Array.isArray(state.workouts)) return {matched:0,created:0,total:activities.length};
-
-    let matched=0, created=0, changed=0;
-    activities.forEach(a=>{
-      const d=dateOnly(a);
-      const disc=discipline(a);
-      if(!d || disc==='Andet') return;
-
-      let w = state.workouts.find(x=>x.date===d && x.discipline===disc);
-      if(w){ matched++; }
-      else{
-        created++;
-        w = {
-          id:`strava_${a.id || Date.now()}_${disc}`,
-          date:d,
-          day: typeof dayName === 'function' ? dayName(d) : '',
-          week: typeof weekNo === 'function' ? weekNo(d) : '',
-          discipline:disc,
-          title:a.name || 'Strava aktivitet',
-          intensity:'Importeret fra Strava',
-          planMinutes:'',
-          planKm:'',
-          actualMinutes:'',
-          actualKm:'',
-          avgHr:'',
-          maxHr:'',
-          status:'Planlagt',
-          rpe:'',
-          equipment:'',
-          notes:''
-        };
-        state.workouts.push(w);
-      }
-
-      const before = JSON.stringify({m:w.actualMinutes,k:w.actualKm,hr:w.avgHr,max:w.maxHr,st:w.status,sid:w.stravaId});
-      w.actualMinutes = min(a) || w.actualMinutes || '';
-      w.actualKm = km(a) || w.actualKm || '';
-      w.avgHr = a.average_heartrate || a.averageHeartRate || w.avgHr || '';
-      w.maxHr = a.max_heartrate || a.maxHeartRate || w.maxHr || '';
-      w.status = 'Gennemført';
-      w.stravaId = a.id || '';
-      w.stravaType = a.sport_type || a.type || '';
-      w.stravaRawSummary = a;
-      if(!String(w.notes||'').includes(`Strava ID: ${a.id || ''}`)){
-        w.notes = `${w.notes ? w.notes + ' | ' : ''}Strava ID: ${a.id || ''}. ${a.name || ''}`;
-      }
-      const after = JSON.stringify({m:w.actualMinutes,k:w.actualKm,hr:w.avgHr,max:w.maxHr,st:w.status,sid:w.stravaId});
-      if(before !== after) changed++;
-    });
-
-    state.workouts.sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.discipline).localeCompare(String(b.discipline)));
-    let adj = null;
-    if(changed && typeof autoRecalculateFuturePlan === 'function'){
-      adj = autoRecalculateFuturePlan('automatisk Strava-import');
-    }else if(typeof save === 'function'){
-      save();
-    }
-    if(typeof renderAll === 'function') renderAll();
-    return {matched,created,changed,total:activities.length, adjustment:adj};
-  }
-  async function syncOneLightPage(){
-    // Let sync ved åbning. Historisk backfill kører også som scheduled function på Netlify.
-    return await jsonFetch(API + '/strava-sync-page?days=14&page=1&perPage=2', {
-      method:'POST',
-      body:JSON.stringify({days:14,page:1,perPage:2})
-    });
-  }
-  async function runAutoStravaFlow(){
-    if(sessionStorage.getItem(AUTO_RUNNING_KEY)==='1') return;
-    sessionStorage.setItem(AUTO_RUNNING_KEY,'1');
-    try{
-      setAutoBox('Automatisk Strava-sync: tjekker forbindelse...', 'warn');
-      const status = await jsonFetch(API + '/strava-status');
-      if(!status.connected){
-        setAutoBox('Automatisk Strava-sync: Strava er ikke forbundet endnu. Tryk “Forbind Strava” én gang.', 'warn');
-        return;
-      }
-
-      const last = localStorage.getItem(AUTO_LAST_KEY) || '';
-      const today = todayStr();
-
-      if(last !== today){
-        setAutoBox('Automatisk Strava-sync: henter nyeste aktiviteter...', 'warn');
-        const sync = await syncOneLightPage();
-        localStorage.setItem(AUTO_LAST_KEY, today);
-        if(sync.rateLimited){
-          setAutoBox('Automatisk Strava-sync: Strava rate limit ramt. Appen prøver igen næste gang den åbnes, og Netlify fortsætter i baggrunden.', 'warn');
-          return;
-        }
-      }
-
-      setAutoBox('Automatisk Strava-sync: importerer aktiviteter til planen...', 'warn');
-      const imp = await autoImportActivities();
-      setAutoBox(`Automatisk Strava-sync: klar. ${imp.total} aktiviteter vist/importeret, ${imp.created} nye i appen, ${imp.changed} opdateret.`, 'ok');
-    }catch(e){
-      const msg = String(e.message || e);
-      if(msg.includes('rate') || msg.includes('429')){
-        setAutoBox('Automatisk Strava-sync: Strava rate limit ramt. Prøver igen senere.', 'warn');
-      }else{
-        setAutoBox('Automatisk Strava-sync fejlede: ' + msg, 'bad');
-      }
-    }finally{
-      sessionStorage.removeItem(AUTO_RUNNING_KEY);
-    }
-  }
-
-  window.__runAutoStravaFlow = runAutoStravaFlow;
-
-  window.addEventListener('load', ()=>{
-    setTimeout(runAutoStravaFlow, 2500);
-  });
-})();
-</script>
-
-
 <script>
 (function(){
   const API = '/.netlify/functions';
@@ -1517,237 +1101,7 @@
   function mapSvg(points){
     const b=bounds(points);
     if(!b || points.length<2) return `<div class="activity-map-empty">Ingen GPS-rute fundet for denne aktivitet.</div>`;
-    const W=760,H=420,pad=28;
-    const lngSpan=Math.max(0.0001,b.maxLng-b.minLng);
-    const latSpan=Math.max(0.0001,b.maxLat-b.minLat);
-    const sx=(W-pad*2)/lngSpan, sy=(H-pad*2)/latSpan;
-    const scale=Math.min(sx,sy);
-    const usedW=lngSpan*scale, usedH=latSpan*scale;
-    const x0=(W-usedW)/2, y0=(H-usedH)/2;
-    const xy=p=>{
-      const lat=Number(p[0]), lng=Number(p[1]);
-      const x=x0+(lng-b.minLng)*scale;
-      const y=y0+(b.maxLat-lat)*scale;
-      return [x,y];
-    };
-    const d=points.filter(p=>Array.isArray(p)&&p.length>=2).map((p,i)=>{
-      const [x,y]=xy(p);
-      return `${i?'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    const [sx0,sy0]=xy(points[0]);
-    const [ex,ey]=xy(points[points.length-1]);
-    return `<div class="activity-map-wrap">
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rutekort for aktivitet">
-        <rect x="0" y="0" width="${W}" height="${H}" fill="#eff6ff"></rect>
-        <path d="${d}" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
-        <circle cx="${sx0.toFixed(1)}" cy="${sy0.toFixed(1)}" r="8" fill="#16a34a"><title>Start</title></circle>
-        <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="8" fill="#dc2626"><title>Slut</title></circle>
-        <text x="16" y="${H-16}" font-size="13" fill="#475569">Kort baseret på Strava GPS-stream · ikke med baggrundskort</text>
-      </svg>
-    </div>`;
-  }
-
-  function lineChart(title, values, unit, transform){
-    const arr=(values||[]).map(v=>Number(transform?transform(v):v)).filter(Number.isFinite);
-    if(arr.length<2) return `<div class="activity-chart-card"><div class="activity-chart-title"><strong>${title}</strong><small>Ingen data</small></div><div class="activity-map-empty">Ingen ${title.toLowerCase()}-data.</div></div>`;
-    const W=520,H=190,p=28;
-    const min=Math.min(...arr), max=Math.max(...arr);
-    const span=Math.max(1e-6,max-min);
-    const step=(W-p*2)/(arr.length-1);
-    const d=arr.map((v,i)=>{
-      const x=p+i*step;
-      const y=H-p-((v-min)/span)*(H-p*2);
-      return `${i?'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    const avg=arr.reduce((a,b)=>a+b,0)/arr.length;
-    return `<div class="activity-chart-card">
-      <div class="activity-chart-title"><strong>${title}</strong><small>gns. ${avg.toFixed(1).replace('.', ',')} ${unit}</small></div>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${title} graf">
-        <rect x="0" y="0" width="${W}" height="${H}" rx="12" fill="#f8fafc"></rect>
-        <line x1="${p}" y1="${H-p}" x2="${W-p}" y2="${H-p}" stroke="#cbd5e1"></line>
-        <line x1="${p}" y1="${p}" x2="${p}" y2="${H-p}" stroke="#cbd5e1"></line>
-        <path d="${d}" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-        <text x="${p}" y="18" font-size="12" fill="#64748b">${max.toFixed(0)} ${unit}</text>
-        <text x="${p}" y="${H-8}" font-size="12" fill="#64748b">${min.toFixed(0)} ${unit}</text>
-      </svg>
-    </div>`;
-  }
-
-  function lapsTable(a){
-    const laps=(a.splits_metric && a.splits_metric.length ? a.splits_metric : a.laps) || [];
-    if(!laps.length) return `<div class="activity-laps-card"><h4>Laps/splits</h4><p class="hint">Ingen laps/splits fundet.</p></div>`;
-    return `<div class="activity-laps-card"><h4>Laps/splits</h4><table><thead><tr><th>#</th><th>Distance</th><th>Tid</th><th>Fart/pace</th><th>Puls</th><th>Watt</th></tr></thead><tbody>
-      ${laps.slice(0,30).map((l,i)=>`<tr>
-        <td>${i+1}</td>
-        <td>${fmtKm(l.distance)}</td>
-        <td>${fmtMin(l.moving_time || l.elapsed_time)}</td>
-        <td>${activityDiscipline(a)==='Løb' ? fmtPace(l.average_speed) : fmtSpeed(l.average_speed)}</td>
-        <td>${l.average_heartrate ? Math.round(l.average_heartrate) : '-'}</td>
-        <td>${l.average_watts ? Math.round(l.average_watts) : '-'}</td>
-      </tr>`).join('')}
-    </tbody></table></div>`;
-  }
-
-  async function openActivityDetail(id){
-    const dialog=document.getElementById('stravaActivityDialog');
-    const title=document.getElementById('activityDetailTitle');
-    const sub=document.getElementById('activityDetailSubtitle');
-    const content=document.getElementById('activityDetailContent');
-    if(!dialog || !content) return;
-    title.textContent='Henter aktivitet...';
-    sub.textContent='';
-    content.innerHTML='<div class="activity-map-empty">Henter detaljer fra Netlify...</div>';
-    dialog.showModal();
-    try{
-      const res=await fetch(`${API}/strava-activity-detail?id=${encodeURIComponent(id)}`);
-      const text=await res.text();
-      let data;
-      try{ data=JSON.parse(text); }catch(e){ data={error:text}; }
-      if(!res.ok) throw new Error(data.error || text);
-      const a=data.activity;
-      title.textContent=a.name || 'Strava-aktivitet';
-      sub.textContent=`${activityDiscipline(a)} · ${fmtDate(a.start_date_local || a.start_date)}${a.streamMeta?.sampled ? ' · stream vist nedskaleret' : ''}`;
-      const s=a.streams || {};
-      content.innerHTML=`
-        <div class="activity-hero-grid">
-          <div class="activity-map-card">
-            <h4>Rute</h4>
-            ${mapSvg(s.latlng || [])}
-          </div>
-          <div class="activity-stat-card">
-            <h4>Nøgletal</h4>
-            <div class="activity-stat-grid">
-              ${stat('Distance', fmtKm(a.distance))}
-              ${stat('Tid i bevægelse', fmtMin(a.moving_time))}
-              ${stat('Elapsed tid', fmtMin(a.elapsed_time))}
-              ${stat(activityDiscipline(a)==='Løb' ? 'Pace' : 'Gns. fart', activityDiscipline(a)==='Løb' ? fmtPace(a.average_speed) : fmtSpeed(a.average_speed))}
-              ${stat('Højdemeter', a.total_elevation_gain ? Math.round(a.total_elevation_gain) + ' m' : '-')}
-              ${stat('Gns. puls', a.average_heartrate ? Math.round(a.average_heartrate) : '-')}
-              ${stat('Maks puls', a.max_heartrate ? Math.round(a.max_heartrate) : '-')}
-              ${stat('Gns. watt', a.average_watts ? Math.round(a.average_watts) : '-')}
-              ${stat('Vægtet watt', a.weighted_average_watts ? Math.round(a.weighted_average_watts) : '-')}
-              ${stat('Kadence', a.average_cadence ? Math.round(a.average_cadence) : '-')}
-              ${stat('Kalorier', a.calories ? Math.round(a.calories) : '-')}
-              ${stat('Udstyr', a.device_name || a.gear_id || '-')}
-            </div>
-          </div>
-        </div>
-        <div class="activity-chart-grid">
-          ${lineChart('Puls', s.heartrate, 'bpm')}
-          ${lineChart('Watt', s.watts, 'W')}
-          ${lineChart(activityDiscipline(a)==='Løb' ? 'Pace' : 'Fart', s.velocity_smooth, activityDiscipline(a)==='Løb' ? 'sek/km' : 'km/t', v => activityDiscipline(a)==='Løb' ? (v ? 1000/Number(v) : null) : Number(v)*3.6)}
-          ${lineChart('Højde', s.altitude, 'm')}
-        </div>
-        ${lapsTable(a)}
-      `;
-    }catch(e){
-      title.textContent='Kunne ikke hente aktivitet';
-      content.innerHTML=`<pre>${String(e.message || e)}</pre>`;
-    }
-  }
-
-  window.__openActivityDetail = openActivityDetail;
-
-  function patchRows(){
-    document.querySelectorAll('#stravaActivityTable tbody tr').forEach(row=>{
-      if(row.dataset.detailBound) return;
-      const firstCell=row.querySelector('td');
-      // Find matching id from visible data by row order in stored activities table is handled by injected data attributes if present.
-      row.dataset.detailBound='1';
-    });
-  }
-
-  document.addEventListener('click', function(e){
-    const row=e.target.closest && e.target.closest('[data-strava-id]');
-    if(row){
-      e.preventDefault();
-      openActivityDetail(row.getAttribute('data-strava-id'));
-    }
-  });
-
-  const oldRender = window.renderStravaActivities;
-  if(typeof oldRender === 'function' && !window.__activityDetailRenderPatched){
-    window.__activityDetailRenderPatched = true;
-    window.renderStravaActivities = function(activities){
-      oldRender(activities);
-      const rows=document.querySelectorAll('#stravaActivityTable tbody tr');
-      rows.forEach((row,i)=>{
-        const a=activities[i];
-        if(a && a.id){
-          row.setAttribute('data-strava-id', a.id);
-          row.classList.add('activity-row-clickable');
-          row.title='Klik for detaljer, kort og grafer';
-        }
-      });
-    };
-  }
-
-  // Patch inline auto renderer by observing table changes and matching latest fetched activities saved globally below.
-  const table=document.getElementById('stravaActivityTable');
-  if(table && !window.__activityDetailObserver){
-    window.__activityDetailObserver = true;
-    const obs=new MutationObserver(()=>{
-      const rows=document.querySelectorAll('#stravaActivityTable tbody tr');
-      const acts=window.__lastStravaActivities || [];
-      rows.forEach((row,i)=>{
-        const a=acts[i];
-        if(a && a.id && !row.dataset.stravaId){
-          row.setAttribute('data-strava-id', a.id);
-          row.classList.add('activity-row-clickable');
-          row.title='Klik for detaljer, kort og grafer';
-        }
-      });
-    });
-    obs.observe(table,{childList:true,subtree:true});
-  }
-})();
-</script>
-
-
-<script>
-(function(){
-  const API = '/.netlify/functions';
-
-  function fmtKm(m){ return Number(m||0) ? (Number(m)/1000).toFixed(2).replace('.', ',') + ' km' : '-'; }
-  function fmtMin(s){ return Number(s||0) ? Math.round(Number(s)/60) + ' min' : '-'; }
-  function fmtSpeed(ms){ return Number(ms||0) ? (Number(ms)*3.6).toFixed(1).replace('.', ',') + ' km/t' : '-'; }
-  function fmtPace(ms){
-    const v = Number(ms||0);
-    if(!v) return '-';
-    const secPerKm = 1000 / v;
-    const min = Math.floor(secPerKm/60);
-    const sec = Math.round(secPerKm%60);
-    return `${min}:${String(sec).padStart(2,'0')} /km`;
-  }
-  function fmtDate(s){
-    if(!s) return '';
-    try{ return new Date(s).toLocaleString('da-DK', {dateStyle:'medium', timeStyle:'short'}); }catch(e){ return String(s); }
-  }
-  function activityDiscipline(a){
-    const t=String(a.sport_type || a.type || '').toLowerCase();
-    if(t.includes('run')) return 'Løb';
-    if(t.includes('ride') || t.includes('bike') || t.includes('cycling')) return 'Cykling';
-    if(t.includes('swim')) return 'Svøm';
-    if(t.includes('walk') || t.includes('hike')) return 'Gang/vandring';
-    return a.sport_type || a.type || 'Aktivitet';
-  }
-  function stat(label, value){ return `<div class="activity-stat"><small>${label}</small><strong>${value || '-'}</strong></div>`; }
-
-  function bounds(points){
-    let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
-    points.forEach(p=>{
-      if(!Array.isArray(p) || p.length<2) return;
-      const lat=Number(p[0]), lng=Number(p[1]);
-      if(!Number.isFinite(lat)||!Number.isFinite(lng)) return;
-      minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); minLng=Math.min(minLng,lng); maxLng=Math.max(maxLng,lng);
-    });
-    if(!Number.isFinite(minLat)) return null;
-    return {minLat,maxLat,minLng,maxLng};
-  }
-  function mapSvg(points){
-    const b=bounds(points);
-    if(!b || points.length<2) return `<div class="activity-map-empty">Ingen GPS-rute fundet for denne aktivitet.</div>`;
-    const W=760,H=420,pad=28;
+    const W=700,H=330,pad=24;
     const lngSpan=Math.max(0.0001,b.maxLng-b.minLng);
     const latSpan=Math.max(0.0001,b.maxLat-b.minLat);
     const scale=Math.min((W-pad*2)/lngSpan,(H-pad*2)/latSpan);
@@ -1767,17 +1121,17 @@
     return `<div class="activity-map-wrap">
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rutekort for aktivitet">
         <rect x="0" y="0" width="${W}" height="${H}" fill="#eff6ff"></rect>
-        <path d="${d}" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
-        <circle cx="${sx0.toFixed(1)}" cy="${sy0.toFixed(1)}" r="8" fill="#16a34a"><title>Start</title></circle>
-        <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="8" fill="#dc2626"><title>Slut</title></circle>
-        <text x="16" y="${H-16}" font-size="13" fill="#475569">GPS-rute fra Strava · uden baggrundskort</text>
+        <path d="${d}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+        <circle cx="${sx0.toFixed(1)}" cy="${sy0.toFixed(1)}" r="7" fill="#16a34a"><title>Start</title></circle>
+        <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="7" fill="#dc2626"><title>Slut</title></circle>
+        <text x="14" y="${H-14}" font-size="12" fill="#475569">GPS-rute fra Strava · uden baggrundskort</text>
       </svg>
     </div>`;
   }
   function lineChart(title, values, unit, transform){
     const arr=(values||[]).map(v=>Number(transform?transform(v):v)).filter(Number.isFinite);
     if(arr.length<2) return `<div class="activity-chart-card"><div class="activity-chart-title"><strong>${title}</strong><small>Ingen data</small></div><div class="activity-map-empty">Ingen ${title.toLowerCase()}-data.</div></div>`;
-    const W=520,H=190,p=28;
+    const W=460,H=150,p=24;
     const min=Math.min(...arr), max=Math.max(...arr);
     const span=Math.max(1e-6,max-min);
     const step=(W-p*2)/(arr.length-1);
@@ -1790,12 +1144,12 @@
     return `<div class="activity-chart-card">
       <div class="activity-chart-title"><strong>${title}</strong><small>gns. ${avg.toFixed(1).replace('.', ',')} ${unit}</small></div>
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${title} graf">
-        <rect x="0" y="0" width="${W}" height="${H}" rx="12" fill="#f8fafc"></rect>
+        <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#f8fafc"></rect>
         <line x1="${p}" y1="${H-p}" x2="${W-p}" y2="${H-p}" stroke="#cbd5e1"></line>
         <line x1="${p}" y1="${p}" x2="${p}" y2="${H-p}" stroke="#cbd5e1"></line>
-        <path d="${d}" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-        <text x="${p}" y="18" font-size="12" fill="#64748b">${max.toFixed(0)} ${unit}</text>
-        <text x="${p}" y="${H-8}" font-size="12" fill="#64748b">${min.toFixed(0)} ${unit}</text>
+        <path d="${d}" fill="none" stroke="#2563eb" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+        <text x="${p}" y="17" font-size="11" fill="#64748b">${max.toFixed(0)} ${unit}</text>
+        <text x="${p}" y="${H-7}" font-size="11" fill="#64748b">${min.toFixed(0)} ${unit}</text>
       </svg>
     </div>`;
   }
@@ -1866,7 +1220,7 @@
   }
   async function openActivityInSidePanel(id, row){
     const panel=document.getElementById('stravaActivitySidePanel');
-    if(!panel) return;
+    if(!panel || !id) return;
     document.querySelectorAll('.activity-row-selected').forEach(r=>r.classList.remove('activity-row-selected'));
     if(row) row.classList.add('activity-row-selected');
     panel.innerHTML='<div class="activity-side-empty"><strong>Henter aktivitet...</strong><p>Henter kort, streams og detaljer.</p></div>';
@@ -1882,19 +1236,20 @@
     }
   }
   window.__openActivityDetail = function(id){ openActivityInSidePanel(id); };
+
   document.addEventListener('click', function(e){
-    const row=e.target.closest && e.target.closest('[data-strava-id]');
-    if(row){
-      e.preventDefault();
-      openActivityInSidePanel(row.getAttribute('data-strava-id'), row);
-    }
+    const row=e.target.closest && e.target.closest('#stravaActivityTable tbody tr[data-strava-id]');
+    if(!row) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openActivityInSidePanel(row.getAttribute('data-strava-id'), row);
   }, true);
 
   function markRows(){
     const acts=window.__lastStravaActivities || [];
     document.querySelectorAll('#stravaActivityTable tbody tr').forEach((row,i)=>{
       const a=acts[i];
-      if(a && a.id && !row.dataset.stravaId){
+      if(a && a.id){
         row.setAttribute('data-strava-id', a.id);
         row.classList.add('activity-row-clickable');
         row.title='Klik for detaljer i sidepanelet';
@@ -1906,7 +1261,8 @@
     window.__activitySidePanelObserver=true;
     const obs=new MutationObserver(markRows);
     obs.observe(table,{childList:true,subtree:true});
-    setTimeout(markRows,500);
+    setTimeout(markRows,400);
+    setTimeout(markRows,1500);
   }
 })();
 </script>
