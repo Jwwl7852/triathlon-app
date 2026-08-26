@@ -43,14 +43,21 @@ export function config(){
 }
 
 function openStore(){
-  // getStore skal åbnes inde i selve function-kaldet.
-  // Hvis Netlify Blobs ikke automatisk er konfigureret, kan NETLIFY_SITE_ID og NETLIFY_AUTH_TOKEN bruges.
-  const options = {};
-  if(process.env.NETLIFY_SITE_ID && process.env.NETLIFY_AUTH_TOKEN){
-    options.siteID = process.env.NETLIFY_SITE_ID;
-    options.token = process.env.NETLIFY_AUTH_TOKEN;
+  const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID || "";
+  const token = process.env.NETLIFY_AUTH_TOKEN || process.env.NETLIFY_API_TOKEN || "";
+
+  if(siteID && token){
+    // Eksplicit objektform. Dette undgår MissingBlobsEnvironmentError i runtimes,
+    // hvor Netlify ikke selv injicerer Blobs context i Functions.
+    return getStore({
+      name: "triathlon-strava",
+      siteID,
+      token
+    });
   }
-  return getStore("triathlon-strava", Object.keys(options).length ? options : undefined);
+
+  // Fallback til automatisk Netlify context.
+  return getStore("triathlon-strava");
 }
 
 export async function getTokens(){

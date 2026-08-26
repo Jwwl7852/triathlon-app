@@ -16,6 +16,6 @@ export async function handler(event){
       NETLIFY_SITE_ID: !!process.env.NETLIFY_SITE_ID,
       NETLIFY_AUTH_TOKEN: !!process.env.NETLIFY_AUTH_TOKEN
     },
-    note: "Secrets vises kun som true/false."
+    note: "Secrets vises kun som true/false. Denne version bruger eksplicit getStore({ name, siteID, token })."
   });
 }
