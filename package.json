@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
-    "@netlify/blobs": "^8.2.0"
+    "@netlify/blobs": "^8.2.0",
+    "openai": "^4.104.0"
   }
 }

@@ -213,3 +213,12 @@ button.mini{padding:7px 11px;font-size:12px;border-radius:10px}
 .strava-manual-links a{font-weight:700}
 .button-like{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;border:0}
 .button-like:hover{text-decoration:none;filter:brightness(.96)}
+
+
+.ui-hidden{display:none !important;}
+
+.ai-coach-result{margin-top:12px;border:1px solid var(--line);border-radius:14px;background:#f8fafc;padding:14px;line-height:1.5}
+.ai-coach-result h4{margin:12px 0 6px}
+.ai-coach-result ul{margin:6px 0 12px;padding-left:20px}
+.ai-coach-result pre{white-space:pre-wrap;background:#0f172a;color:#dbeafe;border-radius:12px;padding:12px;max-height:320px;overflow:auto;font-size:12px}
+.ai-adjustment{border-top:1px solid var(--line);padding:8px 0}

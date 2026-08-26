@@ -680,6 +680,84 @@ function updateGoalUnitFromType(){
 function renderAll(){ renderTabs(); renderDashboard(); renderGoalForecasts(); renderProgram(); renderMonthly(); renderGoals(); renderEquipment(); renderTechnique(); fillEquipmentSelects();  setupPrintWeek(); }
 function renderTabs(){ document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active');}); }
 function sum(arr, field){ return arr.reduce((a,b)=>a+(Number(b[field])||0),0); }
+
+function round1(v){ return Math.round((Number(v)||0)*10)/10; }
+function parseNum(v){ return Number(String(v ?? '').replace(',', '.')) || 0; }
+function ensureBasePlanValues(){
+  state.workouts.forEach(w=>{
+    if(w.basePlanMinutes === undefined || w.basePlanMinutes === null || w.basePlanMinutes === '') w.basePlanMinutes = parseNum(w.planMinutes);
+    if(w.basePlanKm === undefined || w.basePlanKm === null || w.basePlanKm === '') w.basePlanKm = parseNum(w.planKm);
+  });
+}
+function recentCompletionForDiscipline(discipline, days=21){
+  const from = addDaysIso(todayIso(), -days);
+  const rows = state.workouts.filter(w=>w.discipline===discipline && w.date>=from && w.date<todayIso() && (parseNum(w.basePlanMinutes ?? w.planMinutes)>0 || parseNum(w.basePlanKm ?? w.planKm)>0));
+  const plannedMin = rows.reduce((a,w)=>a + parseNum(w.basePlanMinutes ?? w.planMinutes), 0);
+  const actualMin = rows.reduce((a,w)=>a + parseNum(w.actualMinutes), 0);
+  const plannedKm = rows.reduce((a,w)=>a + parseNum(w.basePlanKm ?? w.planKm), 0);
+  const actualKm = rows.reduce((a,w)=>a + parseNum(w.actualKm), 0);
+  const missed = rows.filter(w=>['Sprunget over','Skadet/syg'].includes(w.status)).length;
+  const partial = rows.filter(w=>w.status==='Delvist gennemført').length;
+  const completion = plannedMin > 0 ? actualMin / plannedMin : (plannedKm > 0 ? actualKm / plannedKm : 1);
+  let factor = 1;
+  if(rows.length){
+    if(completion < 0.40 || missed >= 3) factor = 0.75;
+    else if(completion < 0.60 || missed >= 2) factor = 0.85;
+    else if(completion < 0.80 || missed >= 1 || partial >= 2) factor = 0.92;
+    else if(completion > 1.05 && missed === 0) factor = 1.03;
+  }
+  return {rows:rows.length, completion, completionPct:Math.round(completion*100), missed, partial, factor};
+}
+function autoRecalculateFuturePlan(source='auto'){
+  ensureBasePlanValues();
+  const today = todayIso();
+  const until = addDaysIso(today, 14);
+  const factors = {
+    'Løb': recentCompletionForDiscipline('Løb', 21),
+    'Cykling': recentCompletionForDiscipline('Cykling', 21),
+    'Svøm': recentCompletionForDiscipline('Svøm', 21)
+  };
+  const minMinutes = {'Løb':20,'Cykling':40,'Svøm':15};
+  const minKm = {'Løb':3,'Cykling':15,'Svøm':0.5};
+  let changed = 0;
+  const touched = new Set();
+  state.workouts.forEach(w=>{
+    if(w.date < today || w.date > until) return;
+    if(!['Løb','Cykling','Svøm'].includes(w.discipline)) return;
+    if(w.status && w.status !== 'Planlagt') return;
+    const baseMin = parseNum(w.basePlanMinutes ?? w.planMinutes);
+    const baseKm = parseNum(w.basePlanKm ?? w.planKm);
+    if(baseMin <= 0 && baseKm <= 0) return;
+    const f = factors[w.discipline]?.factor || 1;
+    const newMin = baseMin ? Math.max(minMinutes[w.discipline], Math.round(baseMin * f)) : 0;
+    const newKm = baseKm ? Math.max(minKm[w.discipline], round1(baseKm * f)) : 0;
+    const prevMin = parseNum(w.planMinutes);
+    const prevKm = parseNum(w.planKm);
+    let changedThis = false;
+    if(baseMin && prevMin !== newMin){ w.planMinutes = newMin; changedThis = true; }
+    if(baseKm && prevKm !== newKm){ w.planKm = newKm; changedThis = true; }
+    if(changedThis){
+      const info = factors[w.discipline];
+      const msg = `Autojusteret ${today} (${source}): ${w.discipline} ${Math.round(f*100)}% på baggrund af seneste 21 dages gennemførsel (${info.completionPct}%).`;
+      if(!String(w.notes||'').includes('Autojusteret')){
+        w.notes = w.notes ? `${w.notes} | ${msg}` : msg;
+      } else {
+        w.notes = String(w.notes).replace(/Autojusteret[^|\n]*/g, msg);
+      }
+      changed++;
+      touched.add(w.discipline);
+    }
+  });
+  state.autoPlan = { lastRunAt:new Date().toISOString(), source, factors };
+  save();
+  return {
+    changed,
+    touched:[...touched],
+    factors,
+    message: changed ? `Plan autojusteret for næste 14 dage (${[...touched].join(', ')}).` : 'Ingen automatisk planjustering nødvendig lige nu.'
+  };
+}
+
 function renderDashboard(){
   const w=state.workouts, done=w.filter(x=>x.status==='Gennemført'||x.status==='Delvist gennemført');
   const planH=sum(w,'planMinutes')/60, actualH=sum(w,'actualMinutes')/60;
@@ -796,9 +874,10 @@ function saveManualWorkout(e){
     notes: document.getElementById('manualNotes').value ? 'Manuelt oprettet: '+document.getElementById('manualNotes').value : 'Manuelt oprettet'
   });
   state.workouts.sort((a,b)=>a.date.localeCompare(b.date) || String(a.discipline).localeCompare(String(b.discipline)) || String(a.title).localeCompare(String(b.title)));
-  save();
+  const adj = autoRecalculateFuturePlan('manuel træning');
   document.getElementById('manualWorkoutDialog').close();
   renderAll();
+  alert('Manuel træning gemt. ' + adj.message);
 }
 
 function openEdit(id){
@@ -816,7 +895,7 @@ function openEdit(id){
   document.getElementById('notesInput').value=w.notes||'';
   document.getElementById('editDialog').showModal();
 }
-document.getElementById('saveWorkoutBtn').onclick=(e)=>{e.preventDefault(); const id=document.getElementById('editId').value; const w=state.workouts.find(x=>x.id===id); if(!w)return; w.actualMinutes=document.getElementById('actualMinutes').value; w.actualKm=document.getElementById('actualKm').value; w.status=document.getElementById('statusInput').value; w.rpe=document.getElementById('rpeInput').value; if(document.getElementById('avgHrInput')) w.avgHr=document.getElementById('avgHrInput').value; if(document.getElementById('maxHrInput')) w.maxHr=document.getElementById('maxHrInput').value; w.equipment=document.getElementById('equipmentSelect').value; w.notes=document.getElementById('notesInput').value; save(); document.getElementById('editDialog').close(); renderAll();};
+document.getElementById('saveWorkoutBtn').onclick=(e)=>{e.preventDefault(); const id=document.getElementById('editId').value; const w=state.workouts.find(x=>x.id===id); if(!w)return; w.actualMinutes=document.getElementById('actualMinutes').value; w.actualKm=document.getElementById('actualKm').value; w.status=document.getElementById('statusInput').value; w.rpe=document.getElementById('rpeInput').value; if(document.getElementById('avgHrInput')) w.avgHr=document.getElementById('avgHrInput').value; if(document.getElementById('maxHrInput')) w.maxHr=document.getElementById('maxHrInput').value; w.equipment=document.getElementById('equipmentSelect').value; w.notes=document.getElementById('notesInput').value; const adj = autoRecalculateFuturePlan('redigeret træning'); document.getElementById('editDialog').close(); renderAll(); if(adj.changed){ alert(adj.message); }};
 const deleteWorkoutBtn=document.getElementById('deleteWorkoutBtn');
 if(deleteWorkoutBtn){ deleteWorkoutBtn.onclick=()=>{ const id=document.getElementById('editId').value; const w=state.workouts.find(x=>x.id===id); if(!w) return; const ok=confirm(`Vil du slette denne træning?\n\n${dkDate(w.date)} · ${w.discipline} · ${w.title}\n\nDette sletter kun denne ene træning.`); if(!ok) return; state.workouts=state.workouts.filter(x=>x.id!==id); save(); document.getElementById('editDialog').close(); renderAll(); }; }
 document.getElementById('equipmentForm').onsubmit=(e)=>{e.preventDefault(); const name=document.getElementById('equipmentName').value.trim(); if(!name)return; state.equipment.push({name,type:document.getElementById('equipmentType').value}); document.getElementById('equipmentName').value=''; save(); renderAll();};
@@ -1122,9 +1201,10 @@ function applyFitImport(){
     state.workouts.push({id,date:fit.date,day:dayName(fit.date),week:weekNo(fit.date),discipline:fit.discipline,title:'Importeret FIT-træning',intensity:'Importeret',planMinutes:0,planKm:0,actualMinutes:fit.minutes||'',actualKm:fit.km||'',avgHr:fit.avgHr||'',maxHr:fit.maxHr||'',status:'Gennemført',rpe:'',equipment:'',notes:`Importeret fra FIT-fil${activityHrNote(fit)}`});
     state.workouts.sort((a,b)=>a.date.localeCompare(b.date));
   }
-  save(); renderAll();
+  const adj = autoRecalculateFuturePlan('FIT-import');
+  renderAll();
   document.getElementById('fitImportDialog').close();
-  alert('FIT-træningen er lagt ind i planen.');
+  alert('FIT-træningen er lagt ind i planen. ' + adj.message);
 }
 const fitInput = document.getElementById('fitFileInput');
 if(fitInput){
@@ -1309,10 +1389,11 @@ function applyActivityImport(){
     state.workouts.push({id,date:activity.date,day:dayName(activity.date),week:weekNo(activity.date),discipline:activity.discipline,title:`Importeret ${sourceName}`,intensity:'Importeret',planMinutes:0,planKm:0,actualMinutes:activity.minutes||'',actualKm:activity.km||'',avgHr:activity.avgHr||'',maxHr:activity.maxHr||'',status:'Gennemført',rpe:'',equipment:'',notes:`Importeret fra ${sourceName}${activityHrNote(activity)}`});
     state.workouts.sort((a,b)=>a.date.localeCompare(b.date) || String(a.discipline).localeCompare(String(b.discipline)));
   }
-  save(); renderAll();
+  const adj = autoRecalculateFuturePlan(sourceName);
+  renderAll();
   pendingActivityImport = null;
   document.getElementById('fitImportDialog').close();
-  alert(`${sourceName} er lagt ind i planen.`);
+  alert(`${sourceName} er lagt ind i planen. ${adj.message}`);
 }
 const tcxInput = document.getElementById('tcxFileInput');
 if(tcxInput){
@@ -1463,7 +1544,10 @@ function importCsvRows(rows){
     }
   });
   state.workouts.sort((a,b)=>a.date.localeCompare(b.date) || String(a.discipline).localeCompare(String(b.discipline)));
-  save(); 
+  const __csvAdj = autoRecalculateFuturePlan('CSV-import');
+  renderAll();
+  alert(`CSV importeret. Opdateret: ${updated}. Oprettet: ${created}. Sprunget over: ${skipped}. ${__csvAdj.message}`);
+}
 
 // --- Coach-udvidelse ---
 function coachEnsureState(){ if(!state.coach) state.coach={wellness:[],lastBackupDate:''}; if(!Array.isArray(state.coach.wellness)) state.coach.wellness=[]; }
@@ -1698,9 +1782,10 @@ async function importStravaToApp(){
 
     state.workouts.sort((a,b)=>a.date.localeCompare(b.date) || String(a.discipline).localeCompare(String(b.discipline)));
     save();
+    const adj = autoRecalculateFuturePlan('Strava-import');
     renderAll();
     await loadStravaActivities();
-    setStravaStatus(`Import færdig: ${matched} matchet, ${created} nye aktiviteter.`, 'ok');
+    setStravaStatus(`Import færdig: ${matched} matchet, ${created} nye aktiviteter. ${adj.message}`, 'ok');
   }catch(e){
     setStravaStatus('Import fejlede. Se teknisk log.', 'bad');
     stravaLog(e.message);
@@ -1734,9 +1819,180 @@ renderAll = function(){
   bindStravaControls();
 };
 
-renderAll();
-  alert(`CSV importeret. Opdateret: ${updated}. Oprettet: ${created}. Sprunget over: ${skipped}.`);
+
+
+// --- OpenAI ægte AI-vurdering via Netlify Function ---
+function aiDateFromNow(days){
+  const d = new Date(todayIso() + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return iso(d);
 }
+function buildAiCoachPayload(){
+  const today = todayIso();
+  const pastFrom = aiDateFromNow(-42);
+  const futureTo = aiDateFromNow(21);
+  const recent = state.workouts
+    .filter(w => w.date >= pastFrom && w.date <= today)
+    .map(w => ({
+      id:w.id, date:w.date, week:w.week, discipline:w.discipline, title:w.title,
+      planMinutes:w.planMinutes, planKm:w.planKm, basePlanMinutes:w.basePlanMinutes, basePlanKm:w.basePlanKm,
+      actualMinutes:w.actualMinutes, actualKm:w.actualKm, avgHr:w.avgHr, maxHr:w.maxHr,
+      status:w.status, rpe:w.rpe, reason:w.reason, pain:w.pain, fatigue:w.fatigue,
+      equipment:w.equipment, notes:w.notes, stravaId:w.stravaId || ''
+    }));
+  const future = state.workouts
+    .filter(w => w.date >= today && w.date <= futureTo)
+    .map(w => ({
+      id:w.id, date:w.date, week:w.week, discipline:w.discipline, title:w.title,
+      planMinutes:w.planMinutes, planKm:w.planKm, basePlanMinutes:w.basePlanMinutes, basePlanKm:w.basePlanKm,
+      intensity:w.intensity, status:w.status, notes:w.notes
+    }));
+  const recentTotals = {};
+  ['Svøm','Cykling','Løb','Styrke'].forEach(d=>{
+    const rows = recent.filter(w=>w.discipline===d);
+    recentTotals[d] = {
+      plannedMinutes: rows.reduce((a,w)=>a+parseNum(w.planMinutes),0),
+      actualMinutes: rows.reduce((a,w)=>a+parseNum(w.actualMinutes),0),
+      plannedKm: round1(rows.reduce((a,w)=>a+parseNum(w.planKm),0)),
+      actualKm: round1(rows.reduce((a,w)=>a+parseNum(w.actualKm),0)),
+      missed: rows.filter(w=>['Sprunget over','Skadet/syg'].includes(w.status)).length,
+      partial: rows.filter(w=>w.status==='Delvist gennemført').length
+    };
+  });
+  return {
+    generatedAt: new Date().toISOString(),
+    today,
+    athleteContext: {
+      age: 58,
+      goals: [
+        {name:'Copenhagen Marathon', date:'2027-05-09'},
+        {name:'Køge Jernmand 1/2 Ironman', date:'2027-06-13'},
+        {name:'IRONMAN Copenhagen', date:'2027-08-22', target:'A-mål sub-12, B 12:00-12:30, C gennemføre sikkert'}
+      ],
+      constraints: {
+        swim:'Mandag/onsdag/fredag morgen, maks ca. 1,5 km pr. pas',
+        bike:'Tirsdag/torsdag/søndag. Vinter indendørs hometrainer',
+        run:'Løb bygges forsigtigt op fra lav base',
+        rest:'Fredag eftermiddag og lørdag fri/restitution'
+      }
+    },
+    recentTotals,
+    recentWorkouts: recent,
+    upcomingWorkouts: future,
+    weightData: state.weightData || null,
+    coachData: state.coach || null,
+    autoPlan: state.autoPlan || null
+  };
+}
+function renderAiCoachResult(){
+  const box = document.getElementById('aiCoachResultBox');
+  if(!box) return;
+  const r = state.aiCoach && state.aiCoach.lastResult;
+  if(!r){
+    box.innerHTML = '<p class="hint">Ingen AI-vurdering endnu.</p>';
+    return;
+  }
+  const adj = r.suggestedAdjustments || [];
+  box.innerHTML = `
+    <h4>Coach-summary</h4>
+    <p>${r.coachSummary || ''}</p>
+    <h4>Vurdering</h4>
+    <p><strong>Status:</strong> ${r.readinessColor || '-'} · ${r.overallAssessment || ''}</p>
+    <h4>Risici</h4>
+    <ul>${(r.keyRisks || []).map(x=>`<li>${x}</li>`).join('') || '<li>Ingen særlige risici angivet.</li>'}</ul>
+    <h4>Fokus næste 14 dage</h4>
+    <ul>${(r.next14DaysFocus || []).map(x=>`<li>${x}</li>`).join('') || '<li>Ingen fokusområder angivet.</li>'}</ul>
+    <h4>Forslag til ændringer</h4>
+    ${adj.length ? adj.map(a=>`<div class="ai-adjustment"><strong>${a.date} · ${a.discipline}</strong><br>${a.titleIncludes || ''}<br>${a.newPlanMinutes ?? '-'} min · ${a.newPlanKm ?? '-'} km<br><em>${a.intensity || ''}</em><br><small>${a.reason || ''}</small></div>`).join('') : '<p>Ingen konkrete ændringer foreslået.</p>'}
+    <h4>Vægt/kost</h4>
+    <p>${r.nutritionAndWeightNote || ''}</p>
+    ${r.warning ? `<h4>Advarsel</h4><p>${r.warning}</p>` : ''}
+  `;
+}
+async function runAiCoachEvaluation(){
+  const statusBox = document.getElementById('aiCoachStatusBox');
+  try{
+    if(statusBox){ statusBox.className='strava-status-box warn'; statusBox.textContent='AI vurderer planen...'; }
+    const payload = buildAiCoachPayload();
+    const res = await fetch('/.netlify/functions/ai-plan-evaluate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch(e){ data = {ok:false,error:text}; }
+    if(!res.ok || !data.ok) throw new Error(data.error || text || 'AI-kald fejlede');
+    state.aiCoach = {
+      lastRunAt: new Date().toISOString(),
+      lastResult: data.result,
+      model: data.model
+    };
+    save();
+    renderAiCoachResult();
+    if(statusBox){ statusBox.className='strava-status-box ok'; statusBox.textContent=`AI-vurdering klar (${data.model}).`; }
+  }catch(e){
+    if(statusBox){ statusBox.className='strava-status-box bad'; statusBox.textContent='AI-vurdering fejlede. Se beskeden herunder.'; }
+    const box=document.getElementById('aiCoachResultBox');
+    if(box) box.innerHTML = `<pre>${String(e.message || e)}</pre>`;
+  }
+}
+function findWorkoutForAiAdjustment(a){
+  if(!a || !a.date || !a.discipline) return null;
+  const rows = state.workouts.filter(w => w.date === a.date && w.discipline === a.discipline && (!w.status || w.status === 'Planlagt'));
+  if(!rows.length) return null;
+  const needle = String(a.titleIncludes || '').toLowerCase().trim();
+  if(needle){
+    return rows.find(w => String(w.title || '').toLowerCase().includes(needle)) || rows[0];
+  }
+  return rows[0];
+}
+function applyAiCoachAdjustments(){
+  const result = state.aiCoach && state.aiCoach.lastResult;
+  if(!result){ alert('Kør AI-vurdering først.'); return; }
+  const adjustments = result.suggestedAdjustments || [];
+  if(!adjustments.length){ alert('AI har ikke foreslået konkrete ændringer.'); return; }
+  if(!confirm(`Anvend ${adjustments.length} AI-forslag på fremtidige planlagte træninger?`)) return;
+  let applied = 0;
+  ensureBasePlanValues();
+  adjustments.forEach(a=>{
+    const w = findWorkoutForAiAdjustment(a);
+    if(!w) return;
+    if(a.newPlanMinutes !== null && a.newPlanMinutes !== undefined && !Number.isNaN(Number(a.newPlanMinutes))){
+      w.planMinutes = Math.max(0, Math.round(Number(a.newPlanMinutes)));
+    }
+    if(a.newPlanKm !== null && a.newPlanKm !== undefined && !Number.isNaN(Number(a.newPlanKm))){
+      w.planKm = round1(Number(a.newPlanKm));
+    }
+    if(a.intensity) w.intensity = a.intensity;
+    const note = `AI-justeret ${todayIso()}: ${a.reason || 'AI-forslag anvendt.'}`;
+    w.notes = w.notes ? `${w.notes} | ${note}` : note;
+    applied++;
+  });
+  save();
+  renderAll();
+  alert(`${applied} AI-forslag er anvendt.`);
+}
+function bindAiCoachControls(){
+  const runBtn=document.getElementById('runAiCoachBtn');
+  if(runBtn && !runBtn.dataset.bound){
+    runBtn.dataset.bound='1';
+    runBtn.addEventListener('click', runAiCoachEvaluation);
+  }
+  const applyBtn=document.getElementById('applyAiCoachBtn');
+  if(applyBtn && !applyBtn.dataset.bound){
+    applyBtn.dataset.bound='1';
+    applyBtn.addEventListener('click', applyAiCoachAdjustments);
+  }
+  renderAiCoachResult();
+}
+const __renderAllBeforeAiCoach = renderAll;
+renderAll = function(){
+  __renderAllBeforeAiCoach();
+  bindAiCoachControls();
+};
+
+renderAll();
 const csvInput = document.getElementById('csvFileInput');
 if(csvInput){
   csvInput.onchange = (e)=>{

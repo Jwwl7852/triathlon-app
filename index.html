@@ -14,11 +14,11 @@
       <p class="subtitle">Start: 19. august 2026 · personlig plan baseret på dine tidligere succesuger · A-mål sub-12</p>
     </div>
     <div class="header-actions">
-      <button id="backupMenuBtn" class="secondary">Backup</button>
-      <button id="exportCsvBtn">Eksportér CSV</button>
+      <button id="backupMenuBtn" class="secondary ui-hidden" aria-hidden="true">Backup</button>
+      <button id="exportCsvBtn" class="ui-hidden" aria-hidden="true">Eksportér CSV</button>
       <button id="manualWorkoutBtn" class="secondary">Tilføj træning manuelt</button>
       <label class="file-btn fit-btn">Importér træningsfil<input id="activityFileInput" type="file" accept=".fit,.csv,.tcx,.gpx,application/octet-stream,text/csv,application/xml,text/xml" /></label>
-      <button id="aiUpdateBtn" class="update-btn">AI-genberegn</button>
+      <button id="aiUpdateBtn" class="update-btn ui-hidden" aria-hidden="true">AI-genberegn</button>
     </div>
   </header>
 
@@ -91,6 +91,18 @@
 
 
 
+
+      <div class="card">
+        <h3>Ægte AI-vurdering</h3>
+        <p class="hint">AI-vurderingen bruger OpenAI API via Netlify Functions. API-nøglen ligger kun som environment variable på Netlify og aldrig i HTML-filen.</p>
+        <div class="dialog-actions">
+          <button type="button" id="runAiCoachBtn" class="update-btn">Kør AI-vurdering</button>
+          <button type="button" id="applyAiCoachBtn" class="secondary">Anvend AI-forslag på næste 14 dage</button>
+        </div>
+        <div id="aiCoachStatusBox" class="strava-status-box">Status: ikke kørt</div>
+        <div id="aiCoachResultBox" class="ai-coach-result"></div>
+      </div>
+
     <section id="strava" class="panel">
       <div class="two-col">
         <div class="card">
@@ -106,12 +118,13 @@
           </div>
 
           <div id="stravaStatusBox" class="strava-status-box">Status: ikke tjekket</div>
-          <div class="strava-pin-box">
+          <p class="hint">Når du importerer Strava-synk til appen, genberegner appen automatisk de næste 14 dage ud fra dine registrerede træninger.</p>
+          <div class="strava-pin-box ui-hidden">
             <label>App PIN, hvis du sætter APP_PIN i Netlify
               <input id="stravaPinInput" type="password" placeholder="Valgfrit, men anbefales" />
             </label>
           </div>
-          <div id="stravaManualLinks" class="strava-manual-links">
+          <div id="stravaManualLinks" class="strava-manual-links ui-hidden">
             <strong>Manuel test:</strong>
             <a href="/.netlify/functions/strava-status" target="_blank" rel="noopener">Åbn status</a>
             <a href="/.netlify/functions/strava-sync-page?days=30&page=1&perPage=2" target="_blank" rel="noopener">Åbn sync 30 dage side 1</a>
@@ -119,8 +132,8 @@
             <a href="/.netlify/functions/strava-diagnostics" target="_blank" rel="noopener">Åbn diagnostics</a>
           </div>
           
-          <p class="hint">Hvis “Forbind Strava” ikke åbner noget, så test først om serveren kører:</p>
-          <p><a id="stravaServerTestLink" href="http://localhost:8787" target="_blank" rel="noopener">Åbn lokal Strava-server-test</a></p>
+          <p class="hint ui-hidden">Hvis “Forbind Strava” ikke åbner noget, så test først om serveren kører:</p>
+          <p class="ui-hidden"><a id="stravaServerTestLink" href="http://localhost:8787" target="_blank" rel="noopener">Åbn lokal Strava-server-test</a></p>
         </div>
 
         <div class="card">
