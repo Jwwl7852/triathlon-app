@@ -2381,3 +2381,205 @@ function setupPrintWeek(){
   window.addEventListener('load',()=>setTimeout(verify,200));
   setTimeout(verify,500); setTimeout(verify,1500);
 })();
+
+
+
+/* === V8 SAFE GARMIN BUILDER: no invalid FIT export === */
+(function(){
+  function num(v){ const n=Number(String(v??'').replace(',','.')); return Number.isFinite(n)?n:0; }
+  function sanitize(s){ return String(s||'garmin-workout').toLowerCase().replace(/[æ]/g,'ae').replace(/[ø]/g,'oe').replace(/[å]/g,'aa').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,64) || 'garmin-workout'; }
+  function download(name, text, type='text/plain;charset=utf-8'){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([text],{type}));
+    a.download=name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+  }
+  function paceText(minPerKm){
+    const v=num(minPerKm);
+    if(!v) return '-';
+    const m=Math.floor(v);
+    const s=Math.round((v-m)*60);
+    return `${m}:${String(s).padStart(2,'0')} min/km`;
+  }
+  function secToText(sec){
+    sec=Math.max(0,Math.round(num(sec)));
+    if(sec % 60 === 0) return `${sec/60} min`;
+    if(sec < 60) return `${sec} sek`;
+    return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')} min`;
+  }
+  function kmToM(km){ return Math.round(num(km)*1000); }
+  function minToSec(min){ return Math.round(num(min)*60); }
+
+  function parseSteps(w){
+    const text = `${w.title||''} ${w.intensity||''} ${w.notes||''}`;
+    const planMin=num(w.planMinutes), planKm=num(w.planKm);
+    let m = text.match(/(\d+)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*min\s*(?:roligt\s*)?l[øo]b\s*\/\s*(\d+(?:[,.]\d+)?)\s*min\s*gang/i);
+    if(m){
+      const reps=parseInt(m[1],10), run=num(m[2]), walk=num(m[3]);
+      const steps=[{name:'Opvarmning',type:'Warm Up',duration:'5 min',target:'Let jog/gang',note:'Roligt i gang'}];
+      for(let i=1;i<=reps;i++){
+        steps.push({name:`Løb ${i}`,type:'Run',duration:`${run} min`,target:'Roligt løb / RPE 3-5',note:'Hold igen'});
+        steps.push({name:`Gang ${i}`,type:'Recover',duration:`${walk} min`,target:'Gang',note:'Få pulsen ned'});
+      }
+      steps.push({name:'Nedkøling',type:'Cool Down',duration:'5 min',target:'Gang/let jog',note:'Rolig afslutning'});
+      return steps;
+    }
+
+    m = text.match(/(\d+)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*sek/i);
+    if(m){
+      const reps=parseInt(m[1],10), sec=num(m[2]);
+      const rest = w.discipline === 'Cykling' ? '100 sek let' : '60 sek let';
+      const steps=[{name:'Opvarmning',type:'Warm Up',duration:'10 min',target:'Roligt',note:'Forbered kroppen'}];
+      for(let i=1;i<=reps;i++){
+        steps.push({name:`Interval ${i}`,type:'Interval',duration:`${sec} sek`,target:w.discipline==='Cykling'?'Høj kadence, ikke max':'Kontrolleret hurtigt',note:'Teknisk fokus'});
+        steps.push({name:`Pause ${i}`,type:'Recover',duration:rest,target:'Let',note:'Klar til næste'});
+      }
+      steps.push({name:'Nedkøling',type:'Cool Down',duration:'5 min',target:'Roligt',note:'Afslut let'});
+      return steps;
+    }
+
+    if(w.discipline === 'Løb' && planKm > 0){
+      const pace = planMin && planKm ? planMin / planKm : 0;
+      return [
+        {name:'Opvarmning',type:'Warm Up',duration:'5 min',target:'Let jog/gang',note:'Roligt i gang'},
+        {name:'Hoveddel',type:'Run',duration:`${planKm.toFixed(1).replace('.', ',')} km`,target: pace ? `Pace ca. ${paceText(pace)} · accepter +/- 45 sek/km` : 'Roligt løb',note:w.intensity||w.title||''},
+        {name:'Nedkøling',type:'Cool Down',duration:'5 min',target:'Let jog/gang',note:'Rolig afslutning'}
+      ];
+    }
+
+    if(w.discipline === 'Cykling' && planKm > 0){
+      return [
+        {name:'Opvarmning',type:'Warm Up',duration:'10 min',target:'Z1-Z2',note:'Rolig kadence'},
+        {name:'Hoveddel',type:'Bike',duration:`${planKm.toFixed(1).replace('.', ',')} km`,target:w.intensity||'Z2 / roligt',note:w.title||''},
+        {name:'Nedkøling',type:'Cool Down',duration:'5 min',target:'Let rul',note:'Afslut roligt'}
+      ];
+    }
+
+    return [
+      {name:'Hoveddel',type:w.discipline||'Workout',duration:`${planMin||30} min`,target:w.intensity||'Åbent mål',note:w.title||''}
+    ];
+  }
+
+  function workoutPayload(w){
+    const steps=parseSteps(w);
+    return {
+      source:'JL triathlon-app',
+      status:'manual-garmin-builder',
+      note:'Denne fil er ikke en Garmin FIT-fil. Den er en sikker struktureret workout til manuel oprettelse eller senere Garmin Training API-integration.',
+      workout:{
+        date:w.date,
+        discipline:w.discipline,
+        title:w.title,
+        plannedMinutes:w.planMinutes,
+        plannedKm:w.planKm,
+        equipment:w.equipment,
+        intensity:w.intensity,
+        notes:w.notes
+      },
+      steps
+    };
+  }
+
+  function textWorkout(payload){
+    const w=payload.workout;
+    return [
+      `GARMIN WORKOUT`,
+      `Dato: ${w.date}`,
+      `Disciplin: ${w.discipline}`,
+      `Titel: ${w.title}`,
+      `Plan: ${w.plannedMinutes||0} min · ${w.plannedKm||0} km`,
+      `Intensitet: ${w.intensity||''}`,
+      ``,
+      `OPRET MANUELT I GARMIN CONNECT`,
+      `Garmin Connect app/web → Training & Planning → Workouts → Create Workout`,
+      ``,
+      ...payload.steps.map((s,i)=>[
+        `Step ${i+1}: ${s.name}`,
+        `Type: ${s.type}`,
+        `Varighed: ${s.duration}`,
+        `Mål: ${s.target}`,
+        s.note ? `Note: ${s.note}` : '',
+        ``
+      ].filter(Boolean).join('\n'))
+    ].join('\n');
+  }
+
+  function csvWorkout(payload){
+    return ['step,name,type,duration,target,note'].concat(
+      payload.steps.map((s,i)=>[
+        i+1,
+        `"${String(s.name).replace(/"/g,'""')}"`,
+        `"${String(s.type).replace(/"/g,'""')}"`,
+        `"${String(s.duration).replace(/"/g,'""')}"`,
+        `"${String(s.target).replace(/"/g,'""')}"`,
+        `"${String(s.note||'').replace(/"/g,'""')}"`
+      ].join(','))
+    ).join('\n');
+  }
+
+  window.openGarminWorkout = function(id){
+    const workouts = (window.state && window.state.workouts) || (typeof state !== 'undefined' ? state.workouts : []);
+    const w = workouts.find(x=>String(x.id)===String(id));
+    if(!w){ alert('Kunne ikke finde træningen. Genindlæs siden og prøv igen.'); return; }
+
+    const dialog=document.getElementById('garminWorkoutDialog');
+    const title=document.getElementById('garminWorkoutTitle');
+    const sub=document.getElementById('garminWorkoutSubtitle');
+    const body=document.getElementById('garminWorkoutContent');
+    if(!dialog || !body){ alert('Garmin-popup mangler. Upload hele v8-pakken.'); return; }
+
+    const payload=workoutPayload(w);
+    const base=sanitize(`${w.date}-${w.discipline}-${w.title}`);
+
+    title.textContent=`Garmin workout-builder: ${w.title}`;
+    sub.textContent=`${w.date} · ${w.discipline} · sikker manuel eksport`;
+
+    body.innerHTML=`
+      <div class="garmin-warning">
+        <strong>Vigtig ændring</strong>
+        <p>.FIT-download er fjernet, fordi Fenix 7 afviste filen. Denne version laver i stedet en sikker, struktureret opskrift, som kan oprettes manuelt i Garmin Connect — og samme JSON kan bruges senere, hvis vi får Garmin Training API-adgang.</p>
+      </div>
+      <div class="garmin-workout-actions">
+        <button type="button" id="v8Txt" class="primary">Download trin-for-trin .txt</button>
+        <button type="button" id="v8Csv" class="secondary">Download steps .csv</button>
+        <button type="button" id="v8Json" class="secondary">Download API JSON</button>
+      </div>
+      <div class="garmin-manual-box">
+        <h4>Sådan opretter du den i Garmin Connect</h4>
+        <ol>
+          <li>Åbn Garmin Connect.</li>
+          <li>Gå til <strong>Training & Planning → Workouts → Create Workout</strong>.</li>
+          <li>Vælg disciplin: <strong>${w.discipline}</strong>.</li>
+          <li>Opret steps som vist nedenfor.</li>
+          <li>Gem workouten og send/sync den til Fenix 7.</li>
+        </ol>
+      </div>
+      <div class="garmin-steps">
+        ${payload.steps.map((s,i)=>`<div class="garmin-step">
+          <small>Step ${i+1} · ${s.type}</small>
+          <strong>${s.name}</strong>
+          <span>${s.duration} · ${s.target}</span>
+          ${s.note ? `<p>${s.note}</p>` : ''}
+        </div>`).join('')}
+      </div>
+    `;
+
+    body.querySelector('#v8Txt').onclick=()=>download(`${base}-garmin-workout.txt`, textWorkout(payload));
+    body.querySelector('#v8Csv').onclick=()=>download(`${base}-garmin-steps.csv`, csvWorkout(payload), 'text/csv;charset=utf-8');
+    body.querySelector('#v8Json').onclick=()=>download(`${base}-garmin-api-workout.json`, JSON.stringify(payload,null,2), 'application/json;charset=utf-8');
+
+    dialog.showModal();
+  };
+
+  function relabelGarminButtons(){
+    document.querySelectorAll('[data-garmin-id]').forEach(btn=>{
+      btn.textContent='Garmin builder';
+      btn.title='Åbn sikker Garmin workout-builder';
+    });
+  }
+  window.addEventListener('load',()=>setTimeout(relabelGarminButtons,300));
+  setTimeout(relabelGarminButtons,1000);
+  setTimeout(relabelGarminButtons,2500);
+})();

@@ -464,3 +464,14 @@ button{
 .garmin-steps{display:grid;gap:8px;}
 .garmin-step strong{display:block;margin:2px 0;font-size:15px;}
 @media(max-width:760px){.goal-popup-main{grid-template-columns:1fr}.goal-popup-splits{grid-template-columns:1fr}}
+
+
+/* V8 safe Garmin builder */
+.garmin-warning{border:1px solid #fecaca;background:#fff1f2;border-radius:12px;padding:12px;color:#7f1d1d}
+.garmin-warning strong{display:block;margin-bottom:4px}
+.garmin-warning p{margin:0;line-height:1.45}
+.garmin-manual-box{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:12px}
+.garmin-manual-box h4{margin:0 0 8px}
+.garmin-manual-box ol{margin:0;padding-left:20px}
+.garmin-manual-box li{margin:4px 0}
+.mini-btn.garmin-workout-btn{min-width:92px}
