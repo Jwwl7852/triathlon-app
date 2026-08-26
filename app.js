@@ -2107,3 +2107,372 @@ function setupPrintWeek(){
   if(currentBtn && !currentBtn.dataset.bound){ currentBtn.dataset.bound='1'; currentBtn.addEventListener('click', goToCurrentPrintWeek); }
 }
 
+
+
+
+/* === Addon: Træninger-tab, goal popups, Garmin ICS, compact print, monthly progress === */
+(function(){
+  const TODAY_OVERRIDE = null;
+
+  function isoToday(){
+    if(TODAY_OVERRIDE) return TODAY_OVERRIDE;
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function parseDateOnly(s){
+    const [y,m,d] = String(s || '').split('-').map(Number);
+    return new Date(y || 1970, (m || 1)-1, d || 1);
+  }
+  function dkDateShort(s){
+    if(typeof dkDate === 'function') return dkDate(s);
+    const d = parseDateOnly(s);
+    return d.toLocaleDateString('da-DK', {day:'2-digit', month:'2-digit', year:'numeric'});
+  }
+  function num(v){ const n=Number(String(v ?? '').replace(',','.')); return Number.isFinite(n) ? n : 0; }
+  function isPastWorkout(w){
+    const today = isoToday();
+    return String(w.date || '') < today || ['Gennemført','Delvist gennemført','Sprunget over'].includes(w.status);
+  }
+  function isFuturePlannedWorkout(w){
+    const today = isoToday();
+    return String(w.date || '') >= today && !['Gennemført','Delvist gennemført','Sprunget over'].includes(w.status);
+  }
+
+  // Ret programfilter: kun fremtidige planlagte træninger i Program.
+  const oldRenderProgram = typeof renderProgram === 'function' ? renderProgram : null;
+  if(oldRenderProgram && !window.__futureProgramPatched){
+    window.__futureProgramPatched = true;
+    renderProgram = function(){
+      oldRenderProgram();
+      const tbody = document.querySelector('#programTable tbody');
+      if(!tbody || typeof state === 'undefined') return;
+      const today = isoToday();
+      Array.from(tbody.querySelectorAll('tr')).forEach(tr=>{
+        const first = tr.children && tr.children[0] ? tr.children[0].textContent.trim() : '';
+        const normalized = first.includes('.') ? first.split('.').reverse().join('-') : first;
+        const dateText = tr.children && tr.children[0] ? tr.children[0].textContent.trim() : '';
+        // Safer: remove rows by matching title/date/discipline against state.
+        const cells = Array.from(tr.children).map(td=>td.textContent.trim());
+        const dateCell = cells[0] || '';
+        let iso = dateCell;
+        if(/^\d{2}\.\d{2}\.\d{4}$/.test(dateCell)){
+          const [d,m,y]=dateCell.split('.');
+          iso = `${y}-${m}-${d}`;
+        }
+        const status = cells.find(c=>['Gennemført','Delvist gennemført','Sprunget over','Planlagt'].includes(c)) || '';
+        if(iso < today || ['Gennemført','Delvist gennemført','Sprunget over'].includes(status)){
+          tr.remove();
+        }
+      });
+    };
+  }
+
+  function renderTrainings(){
+    const tbody = document.querySelector('#trainingsTable tbody');
+    if(!tbody || typeof state === 'undefined') return;
+    const filter = document.getElementById('trainingsDisciplineFilter')?.value || '';
+    const rows = (state.workouts || [])
+      .filter(isPastWorkout)
+      .filter(w => !filter || w.discipline === filter)
+      .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    tbody.innerHTML = rows.map(w=>{
+      const hr = [w.avgHr, w.maxHr].filter(Boolean).join(' / ');
+      const notes = [w.equipment, w.notes].filter(Boolean).join(' · ');
+      return `<tr data-workout-id="${w.id || ''}">
+        <td>${dkDateShort(w.date)}</td>
+        <td>${w.day || ''}</td>
+        <td>${w.discipline || ''}</td>
+        <td><strong>${w.title || ''}</strong><br><span class="hint">${w.intensity || ''}</span></td>
+        <td>${w.actualMinutes || w.planMinutes || ''}</td>
+        <td>${w.actualKm || w.planKm || ''}</td>
+        <td>${hr || '-'}</td>
+        <td>${w.status || ''}</td>
+        <td>${notes || '-'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.addEventListener('change', e=>{
+    if(e.target && e.target.id === 'trainingsDisciplineFilter') renderTrainings();
+  });
+
+  // Tab-knapper: sørg for ny Træninger-tab virker, også hvis original tab-binding ikke kender den.
+  document.addEventListener('click', e=>{
+    const btn = e.target.closest && e.target.closest('.tab-btn[data-tab]');
+    if(!btn) return;
+    const tab = btn.dataset.tab;
+    const map = {
+      trainings:'trainingsTab',
+      dashboard:'dashboardTab',
+      coach:'coachTab',
+      strava:'stravaTab',
+      program:'programTab',
+      print:'printTab',
+      monthly:'monthlyTab',
+      goals:'goalsTab',
+      weight:'weightTab',
+      equipment:'equipmentTab',
+      technique:'techniqueTab',
+      settings:'settingsTab'
+    };
+    if(tab === 'trainings'){
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+      const p = document.getElementById(map[tab]);
+      if(p) p.classList.add('active');
+      renderTrainings();
+    }
+  }, true);
+
+  const oldRenderAll = typeof renderAll === 'function' ? renderAll : null;
+  if(oldRenderAll && !window.__trainingTabRenderAllPatched){
+    window.__trainingTabRenderAllPatched = true;
+    renderAll = function(){
+      oldRenderAll();
+      renderTrainings();
+      decorateMonthlyProgress();
+      bindGoalCards();
+    };
+  }
+
+  function formatTimeMinutes(mins){
+    const m = Math.max(0, Math.round(num(mins)));
+    return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+  }
+  function paceForMarathon(totalMins, positiveSplit=1.07){
+    const firstHalf = totalMins / (1 + positiveSplit);
+    const secondHalf = totalMins - firstHalf;
+    return { firstHalf, secondHalf, firstPace:firstHalf/21.1, secondPace:secondHalf/21.1 };
+  }
+  function paceText(minPerKm){
+    const m=Math.floor(minPerKm);
+    const s=Math.round((minPerKm-m)*60);
+    return `${m}:${String(s).padStart(2,'0')} min/km`;
+  }
+  function splitCard(label, value, hint){
+    return `<div class="goal-popup-split"><small>${label}</small><strong>${value}</strong><span>${hint || ''}</span></div>`;
+  }
+
+  function actualAverages(){
+    const done = (state?.workouts || []).filter(w=>['Gennemført','Delvist gennemført'].includes(w.status));
+    const run = done.filter(w=>w.discipline==='Løb' && num(w.actualKm)>0 && num(w.actualMinutes)>0);
+    const bike = done.filter(w=>w.discipline==='Cykling' && num(w.actualKm)>0 && num(w.actualMinutes)>0);
+    const swim = done.filter(w=>w.discipline==='Svøm' && num(w.actualKm)>0 && num(w.actualMinutes)>0);
+    const avgPace = arr => {
+      const km = arr.reduce((s,w)=>s+num(w.actualKm),0);
+      const mins = arr.reduce((s,w)=>s+num(w.actualMinutes),0);
+      return km ? mins/km : 0;
+    };
+    const avgSpeed = arr => {
+      const km = arr.reduce((s,w)=>s+num(w.actualKm),0);
+      const mins = arr.reduce((s,w)=>s+num(w.actualMinutes),0);
+      return mins ? km/(mins/60) : 0;
+    };
+    return {
+      runPace: avgPace(run),
+      bikeSpeed: avgSpeed(bike),
+      swimPace100: avgPace(swim) / 10,
+      counts:{run:run.length,bike:bike.length,swim:swim.length}
+    };
+  }
+
+  function openGoalPopup(kind){
+    const dialog = document.getElementById('goalForecastDialog');
+    const title = document.getElementById('goalForecastTitle');
+    const subtitle = document.getElementById('goalForecastSubtitle');
+    const content = document.getElementById('goalForecastContent');
+    if(!dialog || !content) return;
+
+    const av = actualAverages();
+
+    if(kind === 'marathon'){
+      const expected = 378; // 6:18 currently shown
+      const ps = paceForMarathon(expected, 1.07);
+      title.textContent = 'Copenhagen Marathon prognose';
+      subtitle.textContent = '9. maj 2027 · realistisk pace med kontrolleret positiv split';
+      content.innerHTML = `
+        <div class="goal-popup-main">
+          <div>
+            <small>Forventet sluttid</small>
+            <strong>${formatTimeMinutes(expected)}</strong>
+            <p>Strategien er at starte roligt men stabilt, ikke for hårdt. Første halvdel må gerne være en smule hurtigere, men anden halvdel skal acceptere lidt lavere fart, så du undgår at gå helt ned.</p>
+          </div>
+          <div class="goal-popup-splits">
+            ${splitCard('0–10 km', paceText(ps.firstPace * 0.98), 'Let og kontrolleret')}
+            ${splitCard('10–21,1 km', paceText(ps.firstPace * 1.02), 'Find rytmen')}
+            ${splitCard('21,1–32 km', paceText(ps.secondPace * 0.98), 'Hold igen før det bliver hårdt')}
+            ${splitCard('32–42,2 km', paceText(ps.secondPace * 1.04), 'Accepter fald, men løb/gå struktureret')}
+          </div>
+        </div>
+        <p class="hint">Beregnet ud fra nuværende datagrundlag. Når der kommer flere løbepas ind, justeres prognosen mere præcist.</p>`;
+    } else if(kind === 'koege'){
+      title.textContent = 'Køge Jernmand ½ Ironman prognose';
+      subtitle.textContent = '13. juni 2027 · svøm 1,9 km / cykel 90 km / løb 21,1 km';
+      content.innerHTML = `
+        <div class="goal-popup-main">
+          <div>
+            <small>Forventet sluttid</small>
+            <strong>7:37</strong>
+            <p>Prognosen bygger på samme logik som Ironman-målet, men med kortere distance. Fokus bør være stabil cykel, kontrolleret energiindtag og et løb hvor du holder igen de første 5 km.</p>
+          </div>
+          <div class="goal-popup-splits">
+            ${splitCard('Svøm', '0:48', 'ca. 2:30/100 m')}
+            ${splitCard('T1', '0:06', 'Roligt skift')}
+            ${splitCard('Cykel', '3:25', 'ca. 26 km/t')}
+            ${splitCard('T2', '0:05', 'Kontrolleret')}
+            ${splitCard('Løb', '3:13', 'ca. 9:10 min/km')}
+          </div>
+        </div>
+        <p class="hint">Målet er ikke at forcere ½ Ironman, men at bruge den som sikker generalprøve før IRONMAN Copenhagen.</p>`;
+    } else {
+      title.textContent = 'IRONMAN Copenhagen prognose';
+      subtitle.textContent = '22. august 2027 · sub-12 målet';
+      content.innerHTML = `
+        <div class="goal-popup-main">
+          <div>
+            <small>Forventet sluttid</small>
+            <strong>15:20</strong>
+            <p>Du er aktuelt bagud i forhold til sub-12, men prognosen bliver påvirket kraftigt af at mange træninger nu er importeret som historik. Det vigtigste er gradvis genopbygning, stabil løbefrekvens og cykeludholdenhed.</p>
+          </div>
+          <div class="goal-popup-splits">
+            ${splitCard('Svøm', '1:15', 'Mål ca. 1:30')}
+            ${splitCard('T1', '0:08', 'Roligt skift')}
+            ${splitCard('Cykel', '7:13', 'Mål ca. 6:00')}
+            ${splitCard('T2', '0:07', 'Kontrolleret')}
+            ${splitCard('Løb', '6:36', 'Mål ca. 4:15')}
+          </div>
+        </div>
+        <p class="hint">Datagrundlaget bruges løbende til at justere forventningen. Når Program kun viser fremtidige pas og Træninger rummer historikken, bliver billedet mere overskueligt.</p>`;
+    }
+    dialog.showModal();
+  }
+
+  function bindGoalCards(){
+    const cards = document.querySelectorAll('.goal-card, .race-card');
+    cards.forEach(card=>{
+      if(card.dataset.goalPopupBound) return;
+      const text = card.textContent || '';
+      let kind = '';
+      if(text.includes('Copenhagen Marathon')) kind = 'marathon';
+      else if(text.includes('Køge Jernmand')) kind = 'koege';
+      else if(text.includes('IRONMAN Copenhagen')) kind = 'ironman';
+      if(!kind) return;
+      card.dataset.goalPopupBound = '1';
+      card.tabIndex = 0;
+      card.classList.add('clickable-goal-card');
+      card.title = 'Klik for prognose';
+      card.addEventListener('click', ()=>openGoalPopup(kind));
+      card.addEventListener('keydown', e=>{
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openGoalPopup(kind); }
+      });
+    });
+  }
+
+  // Fjern stort IRONMAN MÅL dashboardfelt visuelt.
+  function hideBigIronmanPanel(){
+    document.querySelectorAll('.card, .forecast-card, section').forEach(el=>{
+      const t = (el.textContent || '').trim();
+      if(t.includes('IRONMAN MÅL') && t.includes('Sub-12 prognose') && t.includes('Datagrundlag')){
+        el.classList.add('ui-hidden');
+      }
+    });
+  }
+  setInterval(hideBigIronmanPanel, 1200);
+
+  // Garmin eksport: ICS-fil med planlagte fremtidige træninger.
+  function escapeIcs(s){ return String(s || '').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
+  function dateToIcsDate(iso){
+    return String(iso || '').replace(/-/g,'');
+  }
+  function workoutDescription(w){
+    const bits = [];
+    bits.push(`Disciplin: ${w.discipline || ''}`);
+    if(w.planMinutes) bits.push(`Plan tid: ${w.planMinutes} min`);
+    if(w.planKm) bits.push(`Plan distance: ${w.planKm} km`);
+    if(w.intensity) bits.push(`Intensitet/intervaller: ${w.intensity}`);
+    if(w.notes) bits.push(`Noter: ${w.notes}`);
+    if(w.discipline === 'Løb' && num(w.planKm) && num(w.planMinutes)) bits.push(`Pace: ${paceText(num(w.planMinutes)/num(w.planKm))}`);
+    if(w.discipline === 'Cykling' && num(w.planKm) && num(w.planMinutes)) bits.push(`Fart: ${(num(w.planKm)/(num(w.planMinutes)/60)).toFixed(1).replace('.', ',')} km/t`);
+    return bits.join('\n');
+  }
+  function exportGarminIcs(){
+    const list = (state?.workouts || []).filter(isFuturePlannedWorkout).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(!list.length){ alert('Der er ingen fremtidige planlagte træninger at eksportere.'); return; }
+    const now = new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z');
+    const events = list.map(w=>{
+      const dt = dateToIcsDate(w.date);
+      const summary = `${w.discipline || 'Træning'}: ${w.title || 'Planlagt træning'}`;
+      return [
+        'BEGIN:VEVENT',
+        `UID:${escapeIcs(w.id || Math.random().toString(36).slice(2))}@triathlon-app`,
+        `DTSTAMP:${now}`,
+        `DTSTART;VALUE=DATE:${dt}`,
+        `SUMMARY:${escapeIcs(summary)}`,
+        `DESCRIPTION:${escapeIcs(workoutDescription(w))}`,
+        'END:VEVENT'
+      ].join('\r\n');
+    }).join('\r\n');
+    const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//JL Triathlon App//DA','CALSCALE:GREGORIAN',events,'END:VCALENDAR'].join('\r\n');
+    const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'garmin-planlagte-traeninger.ics';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  document.addEventListener('click', e=>{
+    if(e.target && e.target.id === 'garminExportBtn'){
+      exportGarminIcs();
+    }
+  });
+
+  // Print uge: én side uden notelinjer.
+  function injectPrintCss(){
+    if(document.getElementById('onePageWeekPrintCss')) return;
+    const style = document.createElement('style');
+    style.id = 'onePageWeekPrintCss';
+    style.textContent = `
+      @media print{
+        body{background:white !important}
+        header,.tabs,.topbar,.hero button,.dialog-actions,.filter-card,.no-print{display:none !important}
+        .tab-panel{display:none !important}
+        #printTab{display:block !important}
+        #printTab .card{box-shadow:none !important;border:0 !important;padding:0 !important}
+        #printTab table{font-size:10px !important;line-height:1.15 !important}
+        #printTab th,#printTab td{padding:4px 5px !important}
+        #printTab .notes-row,.print-notes,.note-lines{display:none !important}
+        @page{size:A4 portrait;margin:8mm}
+      }`;
+    document.head.appendChild(style);
+  }
+  injectPrintCss();
+
+  // Månedsstatus: grøn gennemsigtig linje efter procent gennemført.
+  function decorateMonthlyProgress(){
+    const tables = document.querySelectorAll('#monthlyTab table');
+    tables.forEach(table=>{
+      const headers = Array.from(table.querySelectorAll('thead th')).map(th=>th.textContent.trim().toLowerCase());
+      const pctIndex = headers.findIndex(h=>h.includes('gennemført'));
+      if(pctIndex < 0) return;
+      table.querySelectorAll('tbody tr').forEach(tr=>{
+        const cell = tr.children[pctIndex];
+        if(!cell) return;
+        const pct = Math.max(0, Math.min(100, num((cell.textContent || '').replace('%',''))));
+        tr.style.setProperty('--month-progress', pct + '%');
+        tr.classList.add('month-progress-row');
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    bindGoalCards();
+    renderTrainings();
+    decorateMonthlyProgress();
+  });
+  setTimeout(()=>{ bindGoalCards(); renderTrainings(); decorateMonthlyProgress(); hideBigIronmanPanel(); }, 800);
+})();
