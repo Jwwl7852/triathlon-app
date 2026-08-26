@@ -3292,3 +3292,602 @@ function setupPrintWeek(){
     setTimeout(enhanceMonthlyStatus, 1500);
   });
 })();
+
+
+
+/* === V13 Unique analytics design: Performance Cockpit === */
+(function(){
+  function n(v){ return Number(String(v ?? '').replace(',','.')) || 0; }
+  function todayIsoV13(){
+    if(typeof todayIso === 'function') return todayIso();
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function parseIsoV13(iso){
+    const [y,m,d] = String(iso || '').split('-').map(Number);
+    return new Date(y || 1970, (m || 1)-1, d || 1);
+  }
+  function dateMinusV13(days){
+    const d=parseIsoV13(todayIsoV13());
+    d.setDate(d.getDate()-days);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function weekKeyV13(iso){
+    const d=parseIsoV13(iso);
+    const day=(d.getDay()+6)%7;
+    d.setDate(d.getDate()-day+3);
+    const first=new Date(d.getFullYear(),0,4);
+    const firstDay=(first.getDay()+6)%7;
+    first.setDate(first.getDate()-firstDay+3);
+    const week=1+Math.round((d-first)/(7*24*3600*1000));
+    return `${d.getFullYear()}-${String(week).padStart(2,'0')}`;
+  }
+  function monthKeyV13(iso){ return String(iso || '').slice(0,7); }
+  function fmt1(v){ return (Math.round(n(v)*10)/10).toFixed(1).replace('.', ','); }
+  function fmt0(v){ return String(Math.round(n(v))); }
+  function isDoneV13(w){ return ['Gennemført','Delvist gennemført'].includes(w.status) || n(w.actualMinutes)>0 || n(w.actualKm)>0; }
+  function sumV13(rows, field){ return rows.reduce((s,w)=>s+n(w[field]),0); }
+  function groupByV13(rows, fn){
+    const map={};
+    rows.forEach(w=>{ const k=fn(w); (map[k] ||= []).push(w); });
+    return map;
+  }
+  function disciplineIconV13(d){
+    if(d==='Svøm') return 'S';
+    if(d==='Cykling') return 'C';
+    if(d==='Løb') return 'L';
+    if(d==='Styrke') return 'K';
+    return '•';
+  }
+  function disciplineClassV13(d){
+    if(d==='Svøm') return 'v13-swim';
+    if(d==='Cykling') return 'v13-bike';
+    if(d==='Løb') return 'v13-run';
+    if(d==='Styrke') return 'v13-strength';
+    return 'v13-other';
+  }
+  function paceV13(mins, km){
+    if(!n(mins) || !n(km)) return '-';
+    const p=n(mins)/n(km);
+    const m=Math.floor(p);
+    const s=Math.round((p-m)*60);
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+  function speedV13(km, mins){
+    if(!n(km) || !n(mins)) return '-';
+    return fmt1(n(km)/(n(mins)/60));
+  }
+  function filteredV13(){
+    if(typeof state === 'undefined' || !Array.isArray(state.workouts)) return [];
+    const range=document.getElementById('analyticsRange')?.value || '365';
+    const disc=document.getElementById('analyticsDiscipline')?.value || 'Alle';
+    const cutoff=range==='all' ? '0000-00-00' : dateMinusV13(Number(range));
+    return state.workouts
+      .filter(w=>String(w.date||'') >= cutoff)
+      .filter(w=>disc==='Alle' || w.discipline===disc)
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  }
+
+  function lineSparkV13(values, cls=''){
+    const vals=values.map(n);
+    if(vals.length<2) return '<div class="v13-empty-mini">Ingen trend</div>';
+    const W=320,H=70,p=8;
+    const min=Math.min(...vals), max=Math.max(...vals), span=Math.max(1e-6,max-min);
+    const step=(W-p*2)/(vals.length-1);
+    const d=vals.map((v,i)=>{
+      const x=p+i*step;
+      const y=H-p-((v-min)/span)*(H-p*2);
+      return `${i?'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg class="v13-spark ${cls}" viewBox="0 0 ${W} ${H}"><path d="${d}"></path></svg>`;
+  }
+
+  function ringV13(value, label, sub, cls=''){
+    const pct=Math.max(0,Math.min(100,n(value)));
+    const r=46, c=2*Math.PI*r;
+    const off=c-(pct/100)*c;
+    return `<div class="v13-ring ${cls}">
+      <svg viewBox="0 0 120 120">
+        <circle class="track" cx="60" cy="60" r="${r}"></circle>
+        <circle class="fill" cx="60" cy="60" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${off}"></circle>
+      </svg>
+      <div class="v13-ring-text"><strong>${Math.round(pct)}</strong><span>${label}</span><small>${sub || ''}</small></div>
+    </div>`;
+  }
+
+  function heatmapV13(weekKeys, byWeek){
+    const last=weekKeys.slice(-16);
+    const days=['Man','Tir','Ons','Tor','Fre','Lør','Søn'];
+    const cells=[];
+    last.forEach(k=>{
+      const rows=byWeek[k] || [];
+      const byDay={};
+      rows.forEach(w=>{
+        const d=(parseIsoV13(w.date).getDay()+6)%7;
+        byDay[d]=(byDay[d]||0)+n(w.actualMinutes || w.planMinutes)/60;
+      });
+      for(let i=0;i<7;i++){
+        const v=byDay[i] || 0;
+        let level=0;
+        if(v>0) level=1;
+        if(v>=.75) level=2;
+        if(v>=1.5) level=3;
+        if(v>=2.5) level=4;
+        cells.push(`<div class="v13-heat-cell level-${level}" title="${k} ${days[i]} · ${fmt1(v)} timer"></div>`);
+      }
+    });
+    return `<div class="v13-heatmap">
+      <div class="v13-heat-labels">${days.map(d=>`<span>${d}</span>`).join('')}</div>
+      <div class="v13-heat-grid" style="grid-template-columns:repeat(${last.length},1fr)">${cells.join('')}</div>
+    </div>`;
+  }
+
+  function barsMiniV13(labels, values, cls=''){
+    const max=Math.max(1,...values.map(n));
+    return `<div class="v13-bars ${cls}">
+      ${values.map((v,i)=>`<div class="v13-bar-row"><span>${labels[i]}</span><div><b style="width:${Math.min(100,n(v)/max*100)}%"></b></div><strong>${fmt1(v)}</strong></div>`).join('')}
+    </div>`;
+  }
+
+  function laneV13(label, rows, planRows){
+    const done=rows.filter(isDoneV13);
+    const actualH=sumV13(done,'actualMinutes')/60;
+    const planH=sumV13(planRows,'planMinutes')/60;
+    const actualKm=sumV13(done,'actualKm');
+    const planKm=sumV13(planRows,'planKm');
+    const completion=planH ? Math.min(160, actualH/planH*100) : (actualH?100:0);
+    const cls=disciplineClassV13(label);
+    return `<div class="v13-lane ${cls}">
+      <div class="v13-lane-head"><span>${disciplineIconV13(label)}</span><strong>${label}</strong></div>
+      <div class="v13-lane-progress"><b style="width:${Math.min(100,completion)}%"></b></div>
+      <div class="v13-lane-grid">
+        <div><small>Timer</small><strong>${fmt1(actualH)}</strong><span>plan ${fmt1(planH)}</span></div>
+        <div><small>Km</small><strong>${fmt1(actualKm)}</strong><span>plan ${fmt1(planKm)}</span></div>
+        <div><small>Match</small><strong>${fmt0(completion)}%</strong><span>${completion>115?'høj':completion<75?'lav':'ok'}</span></div>
+      </div>
+    </div>`;
+  }
+
+  function insightV13(rows){
+    const done=rows.filter(isDoneV13);
+    const last14Cut=dateMinusV13(14);
+    const last14=rows.filter(w=>w.date>=last14Cut);
+    const missedPast=rows.filter(w=>w.date<todayIsoV13() && !isDoneV13(w)).length;
+    const runDone=done.filter(w=>w.discipline==='Løb');
+    const bikeDone=done.filter(w=>w.discipline==='Cykling');
+    const swimDone=done.filter(w=>w.discipline==='Svøm');
+    const msgs=[];
+    if(missedPast>0) msgs.push({type:'warn',title:'Datagab',text:`${missedPast} tidligere pas mangler data eller er ikke gennemført.`});
+    if(runDone.length<bikeDone.length*.6) msgs.push({type:'focus',title:'Løb halter efter',text:'Løb fylder relativt lidt i historikken. Hold fokus på stabil frekvens frem for fart.'});
+    if(swimDone.length && swimDone.length<8) msgs.push({type:'info',title:'Svømmeteknik',text:'Svøm har data, men stadig få pas. Teknik og kontinuitet giver mest værdi.'});
+    if(last14.filter(isDoneV13).length>=6) msgs.push({type:'good',title:'God rytme',text:'Du har flere registrerede pas de seneste 14 dage. Fortsæt stabilt uden at forcere.'});
+    if(!msgs.length) msgs.push({type:'info',title:'Klar til analyse',text:'Importer flere træninger for at få skarpere mønstre og prognoser.'});
+    return `<div class="v13-insights">${msgs.slice(0,4).map(m=>`<div class="v13-insight ${m.type}"><strong>${m.title}</strong><p>${m.text}</p></div>`).join('')}</div>`;
+  }
+
+  function renderV13Analytics(){
+    const panel=document.getElementById('analytics');
+    const grid=document.getElementById('analyticsGrid');
+    const kpis=document.getElementById('analyticsKpis');
+    if(!panel || !grid || !kpis) return;
+
+    panel.classList.add('v13-analytics-panel');
+    const rows=filteredV13();
+    const done=rows.filter(isDoneV13);
+    const byWeek=groupByV13(rows,w=>weekKeyV13(w.date));
+    const weekKeys=Object.keys(byWeek).sort();
+    const byDisc=groupByV13(rows,w=>w.discipline||'Andet');
+    const doneByDisc=groupByV13(done,w=>w.discipline||'Andet');
+
+    const planH=sumV13(rows,'planMinutes')/60;
+    const actualH=sumV13(done,'actualMinutes')/60;
+    const completion=planH ? actualH/planH*100 : 0;
+    const last4=weekKeys.slice(-4);
+    const prev4=weekKeys.slice(-8,-4);
+    const last4H=last4.reduce((s,k)=>s+sumV13((byWeek[k]||[]).filter(isDoneV13),'actualMinutes')/60,0);
+    const prev4H=prev4.reduce((s,k)=>s+sumV13((byWeek[k]||[]).filter(isDoneV13),'actualMinutes')/60,0);
+    const momentum=prev4H ? (last4H/prev4H*100) : (last4H?100:0);
+    const consistency=weekKeys.length ? weekKeys.filter(k=>(byWeek[k]||[]).some(isDoneV13)).length/weekKeys.length*100 : 0;
+    const readiness=Math.max(0,Math.min(100, 55 + (completion-80)*0.25 + (consistency-50)*0.35 - Math.max(0,momentum-125)*0.25));
+
+    const weeklyActual=weekKeys.map(k=>sumV13((byWeek[k]||[]).filter(isDoneV13),'actualMinutes')/60);
+    const weeklyKm=weekKeys.map(k=>sumV13((byWeek[k]||[]).filter(isDoneV13),'actualKm'));
+
+    kpis.innerHTML = `
+      <div class="v13-kpi-hero">
+        <span>Performance Cockpit</span>
+        <strong>${fmt1(actualH)} t</strong>
+        <small>faktisk træning · ${fmt1(planH)} t planlagt</small>
+      </div>
+      ${ringV13(readiness,'Balance','belastning vs. rytme','balance')}
+      ${ringV13(completion,'Planmatch','faktisk / plan','match')}
+      ${ringV13(consistency,'Rytme','uger med data','flow')}
+      ${ringV13(momentum,'Momentum','seneste 4 uger','momentum')}
+    `;
+
+    const discOrder=['Svøm','Cykling','Løb','Styrke'];
+    const durationLabels=discOrder.filter(d=>byDisc[d] || doneByDisc[d]);
+    const durationValues=durationLabels.map(d=>sumV13((doneByDisc[d]||[]),'actualMinutes')/60);
+    const distanceValues=durationLabels.map(d=>sumV13((doneByDisc[d]||[]),'actualKm'));
+
+    const longest=[...done].sort((a,b)=>n(b.actualMinutes)-n(a.actualMinutes)).slice(0,6);
+    const longestHtml=longest.map(w=>`<div class="v13-record-row"><span>${w.date}</span><strong>${w.title}</strong><em>${w.discipline} · ${fmt1(n(w.actualMinutes)/60)} t · ${fmt1(w.actualKm)} km</em></div>`).join('');
+
+    const runPace=done.filter(w=>w.discipline==='Løb'&&n(w.actualMinutes)&&n(w.actualKm)).slice(-12);
+    const runPaceValues=runPace.map(w=>n(w.actualMinutes)/n(w.actualKm));
+    const bikeSpeed=done.filter(w=>w.discipline==='Cykling'&&n(w.actualMinutes)&&n(w.actualKm)).slice(-12);
+    const bikeSpeedValues=bikeSpeed.map(w=>n(w.actualKm)/(n(w.actualMinutes)/60));
+
+    grid.innerHTML = `
+      <div class="v13-card v13-wide v13-insight-card">
+        <div class="v13-card-title"><span>Coach lens</span><strong>Hvad data siger lige nu</strong></div>
+        ${insightV13(rows)}
+      </div>
+
+      <div class="v13-card v13-wide">
+        <div class="v13-card-title"><span>Træningsrytme</span><strong>Seneste uger som heatmap</strong></div>
+        ${heatmapV13(weekKeys, byWeek)}
+      </div>
+
+      <div class="v13-card v13-wide">
+        <div class="v13-card-title"><span>Discipline lanes</span><strong>Plan vs. faktisk</strong></div>
+        <div class="v13-lanes">
+          ${discOrder.map(d=>laneV13(d, doneByDisc[d]||[], byDisc[d]||[])).join('')}
+        </div>
+      </div>
+
+      <div class="v13-card">
+        <div class="v13-card-title"><span>Fordeling</span><strong>Timer pr. disciplin</strong></div>
+        ${barsMiniV13(durationLabels, durationValues, 'duration')}
+      </div>
+
+      <div class="v13-card">
+        <div class="v13-card-title"><span>Distance</span><strong>Km pr. disciplin</strong></div>
+        ${barsMiniV13(durationLabels, distanceValues, 'distance')}
+      </div>
+
+      <div class="v13-card">
+        <div class="v13-card-title"><span>Trend</span><strong>Timer pr. uge</strong></div>
+        ${lineSparkV13(weeklyActual.slice(-20),'hours')}
+        <p class="v13-card-note">Seneste ${Math.min(20,weeklyActual.length)} uger · faktisk tid.</p>
+      </div>
+
+      <div class="v13-card">
+        <div class="v13-card-title"><span>Trend</span><strong>Distance pr. uge</strong></div>
+        ${lineSparkV13(weeklyKm.slice(-20),'distance')}
+        <p class="v13-card-note">Samlet distance på tværs af discipliner.</p>
+      </div>
+
+      <div class="v13-card">
+        <div class="v13-card-title"><span>Løb</span><strong>Pace-udvikling</strong></div>
+        ${runPaceValues.length>1 ? lineSparkV13(runPaceValues,'run') : '<div class="v13-empty">Importer flere løb for pace-trend.</div>'}
+        <p class="v13-card-note">${runPace.length ? `Seneste pace: ${paceV13(runPace.at(-1).actualMinutes, runPace.at(-1).actualKm)} min/km` : 'Ingen pace endnu.'}</p>
+      </div>
+
+      <div class="v13-card">
+        <div class="v13-card-title"><span>Cykel</span><strong>Fart-udvikling</strong></div>
+        ${bikeSpeedValues.length>1 ? lineSparkV13(bikeSpeedValues,'bike') : '<div class="v13-empty">Importer flere cykelpas for fart-trend.</div>'}
+        <p class="v13-card-note">${bikeSpeed.length ? `Seneste fart: ${speedV13(bikeSpeed.at(-1).actualKm, bikeSpeed.at(-1).actualMinutes)} km/t` : 'Ingen fart endnu.'}</p>
+      </div>
+
+      <div class="v13-card v13-wide">
+        <div class="v13-card-title"><span>Records</span><strong>Længste pas</strong></div>
+        <div class="v13-records">${longestHtml || '<div class="v13-empty">Ingen gennemførte pas endnu.</div>'}</div>
+      </div>
+    `;
+  }
+
+  function bindV13Analytics(){
+    ['analyticsRange','analyticsDiscipline'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el && !el.dataset.v13Bound){
+        el.dataset.v13Bound='1';
+        el.addEventListener('change',()=>setTimeout(renderV13Analytics,30));
+      }
+    });
+    document.querySelectorAll('.tab[data-tab="analytics"]').forEach(btn=>{
+      if(btn.dataset.v13Bound) return;
+      btn.dataset.v13Bound='1';
+      btn.addEventListener('click',()=>setTimeout(renderV13Analytics,80));
+    });
+  }
+
+  const oldRenderAllV13 = typeof renderAll === 'function' ? renderAll : null;
+  if(oldRenderAllV13 && !window.__v13AnalyticsRenderAllPatched){
+    window.__v13AnalyticsRenderAllPatched=true;
+    renderAll=function(){
+      oldRenderAllV13();
+      bindV13Analytics();
+      renderV13Analytics();
+    };
+  }
+
+  window.renderUniqueAnalytics = renderV13Analytics;
+  window.addEventListener('load',()=>{
+    setTimeout(()=>{bindV13Analytics();renderV13Analytics();},700);
+    setTimeout(()=>{bindV13Analytics();renderV13Analytics();},2000);
+  });
+})();
+
+
+
+/* === V14 Manual Strava Sync Button === */
+(function(){
+  const STRAVA_API_BASE = '/.netlify/functions';
+  let manualSyncRunning = false;
+
+  function statusBox(){
+    return document.getElementById('manualStravaSyncStatus') || document.querySelector('.strava-status-box');
+  }
+  function setManualStatus(message, type='info'){
+    const box = statusBox();
+    if(!box) return;
+    box.classList.remove('ok','warn','error','loading');
+    if(type) box.classList.add(type);
+    box.textContent = message;
+  }
+  async function fetchJson(url, opts={}){
+    const res = await fetch(url, opts);
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch(e){ data = { raw:text }; }
+    if(!res.ok){
+      const msg = data.error || data.message || text || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+  function getAppState(){
+    if(typeof state !== 'undefined') return state;
+    if(window.state) return window.state;
+    return null;
+  }
+  function saveAppState(){
+    if(typeof save === 'function') save();
+    else if(typeof saveState === 'function') saveState();
+  }
+  function renderApp(){
+    if(typeof renderAll === 'function') renderAll();
+  }
+  function disciplineFromStrava(a){
+    const t = String(a.sport_type || a.type || '').toLowerCase();
+    if(t.includes('swim')) return 'Svøm';
+    if(t.includes('ride') || t.includes('bike') || t.includes('cycling') || t.includes('virtualride')) return 'Cykling';
+    if(t.includes('run')) return 'Løb';
+    if(t.includes('walk') || t.includes('hike')) return 'Løb';
+    if(t.includes('workout') || t.includes('weight')) return 'Styrke';
+    return 'Løb';
+  }
+  function isoLocalDate(a){
+    const s = a.start_date_local || a.start_date;
+    if(!s) return new Date().toISOString().slice(0,10);
+    return String(s).slice(0,10);
+  }
+  function dayNameDa(iso){
+    try{
+      const [y,m,d] = iso.split('-').map(Number);
+      return new Date(y,m-1,d).toLocaleDateString('da-DK',{weekday:'long'}).replace(/^./, c=>c.toUpperCase());
+    }catch(e){ return ''; }
+  }
+  function weekNumberFallback(iso){
+    if(typeof weekNo === 'function') return weekNo(iso);
+    const d = new Date(iso + 'T00:00:00');
+    const day = (d.getDay()+6)%7;
+    d.setDate(d.getDate()-day+3);
+    const first = new Date(d.getFullYear(),0,4);
+    const firstDay=(first.getDay()+6)%7;
+    first.setDate(first.getDate()-firstDay+3);
+    return 1 + Math.round((d-first)/(7*24*3600*1000));
+  }
+  function uid(){
+    if(typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'w_' + Math.random().toString(36).slice(2) + Date.now();
+  }
+  function minutes(a){ return Math.round(Number(a.moving_time || a.elapsed_time || 0)/60); }
+  function km(a){ return Math.round(Number(a.distance || 0)/100)/10; }
+  function sameDateDiscipline(w, date, disc){
+    return String(w.date) === String(date) && String(w.discipline) === String(disc);
+  }
+  function findMatchingPlanWorkout(workouts, a){
+    const date = isoLocalDate(a);
+    const disc = disciplineFromStrava(a);
+    const candidates = workouts.filter(w => sameDateDiscipline(w,date,disc));
+    if(!candidates.length) return null;
+
+    // Prefer planned/non-completed rows first
+    return candidates.find(w => !['Gennemført','Delvist gennemført'].includes(w.status)) || candidates[0];
+  }
+  function activityAlreadyImported(workouts, id){
+    const needle = `Strava ID: ${id}`;
+    return workouts.some(w => String(w.stravaId || '') === String(id) || String(w.notes || '').includes(needle));
+  }
+
+  function importActivitiesToApp(activities){
+    const appState = getAppState();
+    if(!appState || !Array.isArray(appState.workouts)) throw new Error('App-state kunne ikke findes.');
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    activities.forEach(a=>{
+      if(!a || !a.id){ skipped++; return; }
+      if(activityAlreadyImported(appState.workouts, a.id)){ skipped++; return; }
+
+      const date = isoLocalDate(a);
+      const disc = disciplineFromStrava(a);
+      const actualMinutes = minutes(a);
+      const actualKm = km(a);
+      const avgHr = a.average_heartrate ? Math.round(a.average_heartrate) : '';
+      const maxHr = a.max_heartrate ? Math.round(a.max_heartrate) : '';
+      const title = a.name || 'Strava aktivitet';
+      const note = `Strava ID: ${a.id}${a.hasStreams ? ' · streams gemt' : ''}`;
+
+      const match = findMatchingPlanWorkout(appState.workouts, a);
+      if(match){
+        match.actualMinutes = actualMinutes || match.actualMinutes || '';
+        match.actualKm = actualKm || match.actualKm || '';
+        match.avgHr = avgHr || match.avgHr || '';
+        match.maxHr = maxHr || match.maxHr || '';
+        match.status = 'Gennemført';
+        match.notes = [match.notes, note].filter(Boolean).join(' · ');
+        match.stravaId = String(a.id);
+        updated++;
+      }else{
+        appState.workouts.push({
+          id: uid(),
+          date,
+          day: dayNameDa(date),
+          week: weekNumberFallback(date),
+          discipline: disc,
+          title,
+          intensity: 'Importeret fra Strava',
+          planMinutes: 0,
+          planKm: 0,
+          actualMinutes,
+          actualKm,
+          avgHr,
+          maxHr,
+          status: 'Gennemført',
+          rpe: '',
+          equipment: a.device_name || '',
+          notes: note,
+          stravaId: String(a.id)
+        });
+        created++;
+      }
+    });
+
+    saveAppState();
+
+    if(typeof autoRecalculateFuturePlan === 'function'){
+      try{ autoRecalculateFuturePlan('manuel-Strava-sync'); }catch(e){}
+    }
+
+    renderApp();
+    return {created, updated, skipped, total:activities.length};
+  }
+
+  async function getActivitiesPage(limit=300){
+    return await fetchJson(`${STRAVA_API_BASE}/strava-activities?limit=${limit}&_=${Date.now()}`);
+  }
+
+  async function runServerSync(days=14){
+    // Uses existing chunked sync endpoint. Keep it small to avoid rate limits and response issues.
+    const pageSize = 2;
+    let totalStored = 0;
+    let pages = 0;
+
+    for(let page=1; page<=8; page++){
+      setManualStatus(`Synkroniserer Strava... side ${page}`, 'loading');
+      const url = `${STRAVA_API_BASE}/strava-sync-page?days=${encodeURIComponent(days)}&page=${page}&perPage=${pageSize}&_=${Date.now()}`;
+      const data = await fetchJson(url);
+      pages++;
+
+      if(data.rateLimited){
+        const msg = data.resetAt ? `Strava rate limit ramt. Prøv igen efter ${data.resetAt}.` : 'Strava rate limit ramt. Prøv igen lidt senere.';
+        setManualStatus(msg, 'warn');
+        break;
+      }
+
+      totalStored = data.totalStored || data.total || totalStored;
+
+      if(data.done || data.hasMore === false || data.fetched === 0 || data.count === 0) break;
+
+      // Small pause to be gentle to Strava
+      await new Promise(r=>setTimeout(r, 700));
+    }
+
+    return {pages, totalStored};
+  }
+
+  window.manualStravaSyncNow = async function(){
+    if(manualSyncRunning) return;
+    manualSyncRunning = true;
+    const syncBtn = document.getElementById('manualStravaSyncBtn');
+    const importBtn = document.getElementById('manualStravaImportBtn');
+    if(syncBtn) syncBtn.disabled = true;
+    if(importBtn) importBtn.disabled = true;
+
+    try{
+      setManualStatus('Tjekker Strava-forbindelse...', 'loading');
+      const status = await fetchJson(`${STRAVA_API_BASE}/strava-status?_=${Date.now()}`);
+      if(!status.connected){
+        setManualStatus('Strava er ikke forbundet. Gå til Strava-fanen og forbind Strava først.', 'warn');
+        return;
+      }
+
+      await runServerSync(30);
+
+      setManualStatus('Henter synkroniserede aktiviteter og importerer i appen...', 'loading');
+      const data = await getActivitiesPage(500);
+      const activities = data.activities || [];
+      const result = importActivitiesToApp(activities);
+
+      setManualStatus(`Strava-sync færdig: ${result.created} nye, ${result.updated} matchet med plan, ${result.skipped} sprunget over.`, 'ok');
+    }catch(e){
+      setManualStatus(`Strava-sync fejlede: ${e.message || e}`, 'error');
+    }finally{
+      manualSyncRunning = false;
+    }
+  };
+
+  // JS needs lowercase false; keep fallback if previous line was transformed incorrectly by older browsers
+  try{ manualSyncRunning = false; }catch(e){}
+
+  window.manualStravaImportOnly = async function(){
+    const importBtn = document.getElementById('manualStravaImportBtn');
+    if(importBtn) importBtn.disabled = true;
+    try{
+      setManualStatus('Importer seneste gemte Strava-aktiviteter...', 'loading');
+      const data = await getActivitiesPage(500);
+      const result = importActivitiesToApp(data.activities || []);
+      setManualStatus(`Import færdig: ${result.created} nye, ${result.updated} matchet med plan, ${result.skipped} sprunget over.`, 'ok');
+    }catch(e){
+      setManualStatus(`Import fejlede: ${e.message || e}`, 'error');
+    }finally{
+      if(importBtn) importBtn.disabled = false;
+    }
+  };
+
+  function bindManualStravaButtons(){
+    const syncBtn = document.getElementById('manualStravaSyncBtn');
+    const importBtn = document.getElementById('manualStravaImportBtn');
+    if(syncBtn && !syncBtn.dataset.bound){
+      syncBtn.dataset.bound = '1';
+      syncBtn.addEventListener('click', ()=>window.manualStravaSyncNow());
+    }
+    if(importBtn && !importBtn.dataset.bound){
+      importBtn.dataset.bound = '1';
+      importBtn.addEventListener('click', ()=>window.manualStravaImportOnly());
+    }
+  }
+
+  // Fix a typo defensively if the generated code ever hit the Python-style False branch.
+  const oldManualSync = window.manualStravaSyncNow;
+  window.manualStravaSyncNow = async function(){
+    try{
+      await oldManualSync();
+    }finally{
+      manualSyncRunning = false;
+      const syncBtn = document.getElementById('manualStravaSyncBtn');
+      const importBtn = document.getElementById('manualStravaImportBtn');
+      if(syncBtn) syncBtn.disabled = false;
+      if(importBtn) importBtn.disabled = false;
+    }
+  };
+
+  window.addEventListener('load', ()=>{
+    setTimeout(bindManualStravaButtons, 300);
+    setTimeout(bindManualStravaButtons, 1500);
+  });
+
+  const oldRenderAllStravaManual = typeof renderAll === 'function' ? renderAll : null;
+  if(oldRenderAllStravaManual && !window.__manualStravaSyncRenderPatch){
+    window.__manualStravaSyncRenderPatch = true;
+    renderAll = function(){
+      oldRenderAllStravaManual();
+      bindManualStravaButtons();
+    };
+  }
+})();

@@ -148,7 +148,21 @@
     </section>
 
     <section id="strava" class="panel">
-      <div class="two-col">
+      
+        <div class="card manual-strava-card">
+          <div class="section-head">
+            <div>
+              <h3>Manuel Strava-sync</h3>
+              <p class="hint">Brug denne hvis automatisk sync ikke har kørt. Knappen henter nye aktiviteter fra Strava og importerer dem i appen.</p>
+            </div>
+            <div class="manual-strava-actions">
+              <button type="button" id="manualStravaSyncBtn" class="primary">Synk Strava nu</button>
+              <button type="button" id="manualStravaImportBtn" class="secondary">Importer seneste Strava-data</button>
+            </div>
+          </div>
+          <div id="manualStravaSyncStatus" class="manual-strava-status">Klar.</div>
+        </div>
+<div class="two-col">
         <div class="card">
           <h3>Strava-forbindelse</h3>
           <p class="hint">Strava kører via Netlify Functions, så klienthemmelighed og tokens ligger på Netlify — ikke i HTML-filen.</p>
