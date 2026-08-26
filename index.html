@@ -111,13 +111,15 @@
 
           <div class="strava-actions">
             <a id="stravaConnectLink" class="button-like" href="/.netlify/functions/strava-connect" target="_blank" rel="noopener">Forbind Strava</a>
-            <button type="button" class="secondary" id="stravaStatusBtn" onclick="window.__stravaDirectStatus && window.__stravaDirectStatus()">Tjek status</button>
-            <button type="button" class="secondary" id="stravaSync30Btn" onclick="window.__stravaDirectSyncDays && window.__stravaDirectSyncDays(30)">Synk 30 dage</button>
-            <button type="button" class="secondary" id="stravaSyncBtn" onclick="window.__stravaDirectSync && window.__stravaDirectSync()">Synk 365 dage langsomt</button>
-            <button type="button" class="secondary" id="stravaImportBtn" onclick="window.__stravaDirectImport && window.__stravaDirectImport()">Importer synk til app</button>
+            <button type="button" class="ui-hidden secondary" id="stravaStatusBtn" onclick="window.__stravaDirectStatus && window.__stravaDirectStatus()">Tjek status</button>
+            <button type="button" class="ui-hidden secondary" id="stravaSync30Btn" onclick="window.__stravaDirectSyncDays && window.__stravaDirectSyncDays(30)">Synk 30 dage</button>
+            <button type="button" class="ui-hidden secondary" id="stravaSyncBtn" onclick="window.__stravaDirectSync && window.__stravaDirectSync()">Synk 365 dage langsomt</button>
+            <button type="button" class="ui-hidden secondary" id="stravaImportBtn" onclick="window.__stravaDirectImport && window.__stravaDirectImport()">Importer synk til app</button>
           </div>
 
           <div id="stravaStatusBox" class="strava-status-box">Status: ikke tjekket</div>
+          <div id="stravaAutoSyncBox" class="strava-status-box">Automatisk Strava-sync: venter</div>
+          <p class="hint">Når Strava er forbundet, synkroniserer appen automatisk, når du åbner den. Netlify kører også en daglig baggrundssync, og appen importerer nye aktiviteter automatisk til din træningsplan.</p>
           <p class="hint">Når du importerer Strava-synk til appen, genberegner appen automatisk de næste 14 dage ud fra dine registrerede træninger.</p>
           <div class="strava-pin-box ui-hidden">
             <label>App PIN, hvis du sætter APP_PIN i Netlify
@@ -1274,6 +1276,186 @@
     if(input && p) input.value = p;
     if(document.getElementById('stravaStatusBox')) log('Netlify Strava-knapper er indlæst.');
   }, 300);
+})();
+</script>
+
+
+
+<script>
+(function(){
+  const API = '/.netlify/functions';
+  const AUTO_LAST_KEY = 'tri_strava_auto_last';
+  const AUTO_RUNNING_KEY = 'tri_strava_auto_running';
+
+  function todayStr(){
+    const d = new Date();
+    return d.toISOString().slice(0,10);
+  }
+  function setAutoBox(msg, cls){
+    const box = document.getElementById('stravaAutoSyncBox') || document.getElementById('stravaStatusBox');
+    if(box){
+      box.className = 'strava-status-box ' + (cls || '');
+      box.textContent = msg;
+    }
+  }
+  async function jsonFetch(url, options){
+    const res = await fetch(url, {
+      ...(options || {}),
+      headers:{'Content-Type':'application/json', ...((options||{}).headers||{})}
+    });
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch(e){ data = {raw:text}; }
+    if(!res.ok) throw Object.assign(new Error(data.error || text || res.statusText), {status:res.status, data});
+    return data;
+  }
+  function discipline(a){
+    const t = String(a.sport_type || a.type || '').toLowerCase();
+    if(t.includes('run')) return 'Løb';
+    if(t.includes('ride') || t.includes('bike') || t.includes('cycling')) return 'Cykling';
+    if(t.includes('swim')) return 'Svøm';
+    if(t.includes('walk') || t.includes('hike')) return 'Løb';
+    return 'Andet';
+  }
+  function dateOnly(a){
+    return String(a.start_date_local || a.start_date || a.startDate || '').slice(0,10);
+  }
+  function km(a){
+    return Math.round(((a.distance || a.distanceMeters || 0)/1000)*100)/100;
+  }
+  function min(a){
+    return Math.round((a.moving_time || a.movingTimeSeconds || a.elapsed_time || a.elapsedTimeSeconds || 0)/60);
+  }
+  function renderActivities(list){
+    const tbody=document.querySelector('#stravaActivityTable tbody');
+    if(!tbody) return;
+    tbody.innerHTML=(list||[]).slice(0,80).map(a=>{
+      const d=dateOnly(a), disc=discipline(a);
+      const hr=[a.average_heartrate || a.averageHeartRate, a.max_heartrate || a.maxHeartRate].filter(Boolean).join(' / ');
+      const watts=a.average_watts || a.weighted_average_watts || a.averageWatts || '';
+      let match='';
+      try{
+        const m=state.workouts.find(w=>w.date===d && w.discipline===disc);
+        match=m ? m.title : 'Ny aktivitet';
+      }catch(e){}
+      return `<tr><td>${d}</td><td>${disc}</td><td>${a.name||''}</td><td>${km(a)} km</td><td>${min(a)} min</td><td>${hr||'-'}</td><td>${watts||'-'}</td><td>${match}</td></tr>`;
+    }).join('');
+  }
+  async function autoImportActivities(){
+    const data = await jsonFetch(API + '/strava-activities');
+    const activities = data.activities || [];
+    renderActivities(activities);
+    if(typeof state === 'undefined' || !Array.isArray(state.workouts)) return {matched:0,created:0,total:activities.length};
+
+    let matched=0, created=0, changed=0;
+    activities.forEach(a=>{
+      const d=dateOnly(a);
+      const disc=discipline(a);
+      if(!d || disc==='Andet') return;
+
+      let w = state.workouts.find(x=>x.date===d && x.discipline===disc);
+      if(w){ matched++; }
+      else{
+        created++;
+        w = {
+          id:`strava_${a.id || Date.now()}_${disc}`,
+          date:d,
+          day: typeof dayName === 'function' ? dayName(d) : '',
+          week: typeof weekNo === 'function' ? weekNo(d) : '',
+          discipline:disc,
+          title:a.name || 'Strava aktivitet',
+          intensity:'Importeret fra Strava',
+          planMinutes:'',
+          planKm:'',
+          actualMinutes:'',
+          actualKm:'',
+          avgHr:'',
+          maxHr:'',
+          status:'Planlagt',
+          rpe:'',
+          equipment:'',
+          notes:''
+        };
+        state.workouts.push(w);
+      }
+
+      const before = JSON.stringify({m:w.actualMinutes,k:w.actualKm,hr:w.avgHr,max:w.maxHr,st:w.status,sid:w.stravaId});
+      w.actualMinutes = min(a) || w.actualMinutes || '';
+      w.actualKm = km(a) || w.actualKm || '';
+      w.avgHr = a.average_heartrate || a.averageHeartRate || w.avgHr || '';
+      w.maxHr = a.max_heartrate || a.maxHeartRate || w.maxHr || '';
+      w.status = 'Gennemført';
+      w.stravaId = a.id || '';
+      w.stravaType = a.sport_type || a.type || '';
+      w.stravaRawSummary = a;
+      if(!String(w.notes||'').includes(`Strava ID: ${a.id || ''}`)){
+        w.notes = `${w.notes ? w.notes + ' | ' : ''}Strava ID: ${a.id || ''}. ${a.name || ''}`;
+      }
+      const after = JSON.stringify({m:w.actualMinutes,k:w.actualKm,hr:w.avgHr,max:w.maxHr,st:w.status,sid:w.stravaId});
+      if(before !== after) changed++;
+    });
+
+    state.workouts.sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.discipline).localeCompare(String(b.discipline)));
+    let adj = null;
+    if(changed && typeof autoRecalculateFuturePlan === 'function'){
+      adj = autoRecalculateFuturePlan('automatisk Strava-import');
+    }else if(typeof save === 'function'){
+      save();
+    }
+    if(typeof renderAll === 'function') renderAll();
+    return {matched,created,changed,total:activities.length, adjustment:adj};
+  }
+  async function syncOneLightPage(){
+    // Let sync ved åbning. Historisk backfill kører også som scheduled function på Netlify.
+    return await jsonFetch(API + '/strava-sync-page?days=14&page=1&perPage=2', {
+      method:'POST',
+      body:JSON.stringify({days:14,page:1,perPage:2})
+    });
+  }
+  async function runAutoStravaFlow(){
+    if(sessionStorage.getItem(AUTO_RUNNING_KEY)==='1') return;
+    sessionStorage.setItem(AUTO_RUNNING_KEY,'1');
+    try{
+      setAutoBox('Automatisk Strava-sync: tjekker forbindelse...', 'warn');
+      const status = await jsonFetch(API + '/strava-status');
+      if(!status.connected){
+        setAutoBox('Automatisk Strava-sync: Strava er ikke forbundet endnu. Tryk “Forbind Strava” én gang.', 'warn');
+        return;
+      }
+
+      const last = localStorage.getItem(AUTO_LAST_KEY) || '';
+      const today = todayStr();
+
+      if(last !== today){
+        setAutoBox('Automatisk Strava-sync: henter nyeste aktiviteter...', 'warn');
+        const sync = await syncOneLightPage();
+        localStorage.setItem(AUTO_LAST_KEY, today);
+        if(sync.rateLimited){
+          setAutoBox('Automatisk Strava-sync: Strava rate limit ramt. Appen prøver igen næste gang den åbnes, og Netlify fortsætter i baggrunden.', 'warn');
+          return;
+        }
+      }
+
+      setAutoBox('Automatisk Strava-sync: importerer aktiviteter til planen...', 'warn');
+      const imp = await autoImportActivities();
+      setAutoBox(`Automatisk Strava-sync: klar. ${imp.total} aktiviteter i sync, ${imp.created} nye i appen, ${imp.changed} opdateret.`, 'ok');
+    }catch(e){
+      const msg = String(e.message || e);
+      if(msg.includes('rate') || msg.includes('429')){
+        setAutoBox('Automatisk Strava-sync: Strava rate limit ramt. Prøver igen senere.', 'warn');
+      }else{
+        setAutoBox('Automatisk Strava-sync fejlede: ' + msg, 'bad');
+      }
+    }finally{
+      sessionStorage.removeItem(AUTO_RUNNING_KEY);
+    }
+  }
+
+  window.__runAutoStravaFlow = runAutoStravaFlow;
+
+  window.addEventListener('load', ()=>{
+    setTimeout(runAutoStravaFlow, 2500);
+  });
 })();
 </script>
 

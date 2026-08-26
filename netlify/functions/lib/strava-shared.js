@@ -76,6 +76,14 @@ export async function setActivities(activities){
   const store = openStore();
   await store.setJSON("activities", activities);
 }
+export async function getSyncState(){
+  const store = openStore();
+  return (await store.get("syncState", { type: "json" })) || {};
+}
+export async function setSyncState(syncState){
+  const store = openStore();
+  await store.setJSON("syncState", syncState || {});
+}
 
 export async function exchangeCode(code){
   const { clientId, clientSecret } = config();

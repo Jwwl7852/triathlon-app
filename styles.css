@@ -222,3 +222,5 @@ button.mini{padding:7px 11px;font-size:12px;border-radius:10px}
 .ai-coach-result ul{margin:6px 0 12px;padding-left:20px}
 .ai-coach-result pre{white-space:pre-wrap;background:#0f172a;color:#dbeafe;border-radius:12px;padding:12px;max-height:320px;overflow:auto;font-size:12px}
 .ai-adjustment{border-top:1px solid var(--line);padding:8px 0}
+
+.auto-sync-note{font-size:13px;color:var(--muted);margin-top:8px}
