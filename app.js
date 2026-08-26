@@ -106,103 +106,7 @@ function loadState(){
 function resetGeneratedKeepActual(){
   const actual = new Map(state.workouts.map(w=>[w.id, {actualMinutes:w.actualMinutes, actualKm:w.actualKm, status:w.status, rpe:w.rpe, equipment:w.equipment, notes:w.notes}]));
   state.workouts = generatePlan().map(w=> ({...w, ...(actual.get(w.id)||{})}));
-  save(); 
-function goalPaceText(minPerKm){
-  const m=Math.floor(minPerKm||0);
-  const s=Math.round(((minPerKm||0)-m)*60);
-  return `${m}:${String(s).padStart(2,'0')} min/km`;
-}
-function goalSplitCard(label,value,hint){
-  return `<div class="goal-popup-split"><small>${label}</small><strong>${value}</strong><span>${hint||''}</span></div>`;
-}
-function openGoalForecast(kind){
-  const dialog=document.getElementById('goalForecastDialog');
-  const title=document.getElementById('goalForecastTitle');
-  const sub=document.getElementById('goalForecastSubtitle');
-  const body=document.getElementById('goalForecastContent');
-  if(!dialog || !body) return;
-  if(kind==='marathon'){
-    const total=378;
-    const firstHalf=total/2.07;
-    const secondHalf=total-firstHalf;
-    const firstPace=firstHalf/21.1;
-    const secondPace=secondHalf/21.1;
-    title.textContent='Copenhagen Marathon prognose';
-    sub.textContent='9. maj 2027 · realistisk pace-strategi';
-    body.innerHTML=`<div class="goal-popup-main">
-      <div><small>Forventet sluttid</small><strong>6:18</strong><p>Strategien er en kontrolleret positiv split: lidt friskere i starten, men uden at brænde benene af. Derefter accepteres et gradvist fald, så du stadig bevæger dig stabilt fremad.</p></div>
-      <div class="goal-popup-splits">
-        ${goalSplitCard('0-10 km', goalPaceText(firstPace*0.98), 'Roligt men flydende')}
-        ${goalSplitCard('10-21,1 km', goalPaceText(firstPace*1.02), 'Find rytme')}
-        ${goalSplitCard('21,1-32 km', goalPaceText(secondPace*0.98), 'Hold igen')}
-        ${goalSplitCard('32-42,2 km', goalPaceText(secondPace*1.04), 'Løb/gå struktureret')}
-      </div></div>`;
-  } else if(kind==='koege'){
-    title.textContent='Køge Jernmand prognose';
-    sub.textContent='13. juni 2027 · 1,9 km / 90 km / 21,1 km';
-    body.innerHTML=`<div class="goal-popup-main">
-      <div><small>Forventet sluttid</small><strong>7:37</strong><p>Bruges som generalprøve før IRONMAN. Fokus er rolig svøm, stabil cykel og et løb hvor du ikke åbner for hårdt.</p></div>
-      <div class="goal-popup-splits">
-        ${goalSplitCard('Svøm','0:48','ca. 2:30/100 m')}
-        ${goalSplitCard('T1','0:06','Roligt skift')}
-        ${goalSplitCard('Cykel','3:25','ca. 26 km/t')}
-        ${goalSplitCard('T2','0:05','Kontrolleret')}
-        ${goalSplitCard('Løb','3:13','ca. 9:10 min/km')}
-      </div></div>`;
-  } else {
-    title.textContent='IRONMAN Copenhagen prognose';
-    sub.textContent='22. august 2027 · A-mål sub-12';
-    body.innerHTML=`<div class="goal-popup-main">
-      <div><small>Forventet sluttid</small><strong>15:20</strong><p>Aktuelt bagud mod sub-12. Prognosen bliver bedre, når historikken ligger i Træninger og Program kun viser fremtidige pas.</p></div>
-      <div class="goal-popup-splits">
-        ${goalSplitCard('Svøm','1:15','Mål ca. 1:30')}
-        ${goalSplitCard('T1','0:08','Roligt skift')}
-        ${goalSplitCard('Cykel','7:13','Mål ca. 6:00')}
-        ${goalSplitCard('T2','0:07','Kontrolleret')}
-        ${goalSplitCard('Løb','6:36','Mål ca. 4:15')}
-      </div></div>`;
-  }
-  dialog.showModal();
-}
-function bindGoalForecastCards(){
-  document.querySelectorAll('.goal-card').forEach(card=>{
-    if(card.dataset.goalBound) return;
-    const t=card.textContent||'';
-    let kind='';
-    if(t.includes('Copenhagen Marathon')) kind='marathon';
-    else if(t.includes('Køge Jernmand')) kind='koege';
-    else if(t.includes('IRONMAN Copenhagen')) kind='ironman';
-    if(!kind) return;
-    card.dataset.goalBound='1';
-    card.classList.add('clickable-goal-card');
-    card.tabIndex=0;
-    card.title='Klik for prognose';
-    card.addEventListener('click',()=>openGoalForecast(kind));
-    card.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openGoalForecast(kind); }});
-  });
-}
-function escapeIcsText(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
-function exportGarminIcs(){
-  const rows=state.workouts.filter(w=>w.date>=todayIso() && !['Gennemført','Delvist gennemført','Sprunget over','Skadet/syg'].includes(w.status)).sort((a,b)=>a.date.localeCompare(b.date));
-  if(!rows.length){ alert('Der er ingen fremtidige planlagte træninger at eksportere.'); return; }
-  const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z');
-  const events=rows.map(w=>{
-    const dt=String(w.date).replaceAll('-','');
-    const desc=[
-      `Disciplin: ${w.discipline}`,
-      `Plan tid: ${w.planMinutes||0} min`,
-      `Plan distance: ${w.planKm||0} km`,
-      w.intensity ? `Intervaller/intensitet: ${w.intensity}` : '',
-      w.notes ? `Noter: ${w.notes}` : '',
-      (w.discipline==='Løb' && Number(w.planKm)>0 && Number(w.planMinutes)>0) ? `Pace: ${goalPaceText(Number(w.planMinutes)/Number(w.planKm))}` : ''
-    ].filter(Boolean).join('\n');
-    return ['BEGIN:VEVENT',`UID:${escapeIcsText(w.id)}@triathlon-app`,`DTSTAMP:${stamp}`,`DTSTART;VALUE=DATE:${dt}`,`SUMMARY:${escapeIcsText((w.discipline||'Træning')+': '+(w.title||''))}`,`DESCRIPTION:${escapeIcsText(desc)}`,'END:VEVENT'].join('\r\n');
-  }).join('\r\n');
-  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//JL Triathlon App//DA','CALSCALE:GREGORIAN',events,'END:VCALENDAR'].join('\r\n');
-  download('garmin-planlagte-traeninger.ics', ics, 'text/calendar;charset=utf-8');
-}
-
-renderAll();
+  save(); renderAll();
 }
 
 function resetImportedAndActual(){
@@ -773,7 +677,7 @@ function updateGoalUnitFromType(){
   }
 }
 
-function renderAll(){ renderTabs(); renderDashboard(); renderGoalForecasts(); renderProgram(); renderTrainings(); renderMonthly(); renderGoals(); renderEquipment(); renderTechnique(); fillEquipmentSelects(); setupPrintWeek(); bindGoalForecastCards(); }
+function renderAll(){ renderTabs(); renderDashboard(); renderGoalForecasts(); renderProgram(); renderMonthly(); renderGoals(); renderEquipment(); renderTechnique(); fillEquipmentSelects();  setupPrintWeek(); }
 function renderTabs(){ document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active');}); }
 function sum(arr, field){ return arr.reduce((a,b)=>a+(Number(b[field])||0),0); }
 
@@ -861,7 +765,8 @@ function renderDashboard(){
   document.getElementById('topStats').innerHTML = [
     ['Planlagte timer', planH.toFixed(1)], ['Faktiske timer', actualH.toFixed(1)], ['Gennemført', planH?Math.round(actualH/planH*100)+'%':'0%'], ['Sub-12 status', prog.status]
   ].map(([l,v])=>`<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
-  const sub12Box=document.getElementById('sub12Forecast'); if(sub12Box){ sub12Box.innerHTML = ''; }
+  const sub12Box=document.getElementById('sub12Forecast');
+  if(sub12Box){ sub12Box.innerHTML = renderSub12Forecast(prog); }
   const upcoming=w.filter(x=>x.date>=todayIso()).slice(0,24);
   document.getElementById('upcomingList').innerHTML=upcoming.map(x=>{
     const hasActual = Number(x.actualMinutes)>0 || Number(x.actualKm)>0;
@@ -883,49 +788,22 @@ function drawChart(){
   data.forEach((x,i)=>{const y=80+i*80, bar=(x.km/max)*560; ctx.fillRect(150,y,bar,38); ctx.fillText(x.d,20,y+26); ctx.fillText(x.km.toFixed(0)+' km',160+bar,y+26);});
 }
 function renderProgram(){
-  const from=document.getElementById('fromDate').value || todayIso();
+  const from=document.getElementById('fromDate').value || '1900-01-01';
   const to=document.getElementById('toDate').value || '2999-12-31';
   const disc=document.getElementById('disciplineFilter').value;
-  const today = todayIso();
-  const rows=state.workouts.filter(x =>
-    x.date >= today &&
-    x.date >= from &&
-    x.date <= to &&
-    (disc==='Alle'||x.discipline===disc) &&
-    !['Gennemført','Delvist gennemført','Sprunget over','Skadet/syg'].includes(x.status)
-  );
+  const rows=state.workouts.filter(x=>x.date>=from && x.date<=to && (disc==='Alle'||x.discipline===disc));
   document.querySelector('#programTable tbody').innerHTML = rows.map(x=>`<tr data-id="${x.id}" class="${statusClass(x.status)} ${x.date===todayIso()?'today':''}"><td>${dkDate(x.date)}</td><td>${x.day}</td><td>${x.week}</td><td>${x.discipline}</td><td>${x.title}</td><td>${x.intensity}</td><td>${x.planMinutes}</td><td>${x.planKm}</td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${x.avgHr||''}</td><td>${x.maxHr||''}</td><td>${x.status}</td><td>${x.rpe||''}</td><td>${x.equipment||''}</td><td>${x.notes||''}</td></tr>`).join('');
   document.querySelectorAll('#programTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
 }
-
-function renderTrainings(){
-  const table = document.querySelector('#trainingsTable tbody');
-  if(!table) return;
-  const disc = document.getElementById('trainingsDisciplineFilter') ? document.getElementById('trainingsDisciplineFilter').value : 'Alle';
-  const today = todayIso();
-  const rows = state.workouts
-    .filter(x => x.date < today || ['Gennemført','Delvist gennemført','Sprunget over','Skadet/syg'].includes(x.status))
-    .filter(x => disc==='Alle' || x.discipline===disc)
-    .sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(a.discipline).localeCompare(String(b.discipline)));
-  table.innerHTML = rows.map(x=>{
-    const pulse = [x.avgHr, x.maxHr].filter(Boolean).join(' / ');
-    const notes = [x.equipment, x.notes].filter(Boolean).join(' · ');
-    return `<tr data-id="${x.id}" class="${statusClass(x.status)} training-history-row"><td>${dkDate(x.date)}</td><td>${x.day}</td><td>${x.week}</td><td>${x.discipline}</td><td><strong>${x.title}</strong><br><small>${x.intensity||''}</small></td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${pulse||''}</td><td>${x.status}</td><td>${notes||''}</td></tr>`;
-  }).join('');
-  document.querySelectorAll('#trainingsTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
-}
-
 function statusClass(s){ if(s==='Gennemført')return 'status-Gennemført'; if(s==='Delvist gennemført')return 'status-Delvist'; if(s==='Sprunget over')return 'status-Sprunget'; if(s==='Skadet/syg')return 'status-Skadet'; return ''; }
 function renderMonthly(){
   const map={}; state.workouts.forEach(w=>{const m=monthKey(w.date); map[m]??=[]; map[m].push(w);});
   document.querySelector('#monthlyTable tbody').innerHTML = Object.keys(map).sort().map(m=>{
     const a=map[m], ph=sum(a,'planMinutes')/60, ah=sum(a,'actualMinutes')/60, pct=ph?ah/ph:0;
-    const pctDisplay = Math.round(pct*100);
-    const pctWidth = Math.max(0, Math.min(100, pctDisplay));
     const swim=sum(a.filter(x=>x.discipline==='Svøm'),'actualKm'), bike=sum(a.filter(x=>x.discipline==='Cykling'),'actualKm'), run=sum(a.filter(x=>x.discipline==='Løb'),'actualKm');
     let status='Afventer data', sug='Indtast faktisk træning den 15. i måneden.';
     if(ah>0){ if(pct<.75){status='For lav belastning'; sug='Gentag eller reducer næste blok, især løb.';} else if(pct>1.15){status='For høj belastning'; sug='Hold øje med restitution og ømhed.';} else {status='OK'; sug='Fortsæt planlagt progression.';} }
-    return `<tr class="month-progress-row" style="--month-progress:${pctWidth}%"><td>${m}</td><td>${ph.toFixed(1)}</td><td>${ah.toFixed(1)}</td><td>${pctDisplay}%</td><td>${swim.toFixed(1)}</td><td>${bike.toFixed(1)}</td><td>${run.toFixed(1)}</td><td>${status}</td><td>${sug}</td></tr>`;
+    return `<tr><td>${m}</td><td>${ph.toFixed(1)}</td><td>${ah.toFixed(1)}</td><td>${Math.round(pct*100)}%</td><td>${swim.toFixed(1)}</td><td>${bike.toFixed(1)}</td><td>${run.toFixed(1)}</td><td>${status}</td><td>${sug}</td></tr>`;
   }).join('');
 }
 function renderEquipment(){
@@ -1023,8 +901,6 @@ if(deleteWorkoutBtn){ deleteWorkoutBtn.onclick=()=>{ const id=document.getElemen
 document.getElementById('equipmentForm').onsubmit=(e)=>{e.preventDefault(); const name=document.getElementById('equipmentName').value.trim(); if(!name)return; state.equipment.push({name,type:document.getElementById('equipmentType').value}); document.getElementById('equipmentName').value=''; save(); renderAll();};
 window.deleteEquipment=(name)=>{ state.equipment=state.equipment.filter(e=>e.name!==name); save(); renderAll(); };
 ['fromDate','toDate','disciplineFilter'].forEach(id=>document.getElementById(id).onchange=renderProgram);
-const trainingsFilter=document.getElementById('trainingsDisciplineFilter'); if(trainingsFilter){ trainingsFilter.onchange=renderTrainings; }
-const garminExportBtn=document.getElementById('garminExportBtn'); if(garminExportBtn){ garminExportBtn.onclick=exportGarminIcs; }
 const goalForm=document.getElementById('goalForm');
 if(goalForm){ goalForm.onsubmit=saveGoal; }
 const clearGoalFormBtn=document.getElementById('clearGoalFormBtn');
@@ -1032,7 +908,7 @@ if(clearGoalFormBtn){ clearGoalFormBtn.onclick=clearGoalForm; }
 const goalType=document.getElementById('goalType');
 if(goalType){ goalType.onchange=updateGoalUnitFromType; }
 
-document.getElementById('clearFiltersBtn').onclick=()=>{document.getElementById('fromDate').value=todayIso();document.getElementById('toDate').value='';document.getElementById('disciplineFilter').value='Alle';renderProgram();};
+document.getElementById('clearFiltersBtn').onclick=()=>{document.getElementById('fromDate').value='';document.getElementById('toDate').value='';document.getElementById('disciplineFilter').value='Alle';renderProgram();};
 const backupMenuBtn=document.getElementById('backupMenuBtn');
 if(backupMenuBtn){ backupMenuBtn.onclick=()=>document.getElementById('backupDialog').showModal(); }
 document.getElementById('exportJsonBtn').onclick=()=>{download('triathlon-backup.json', JSON.stringify(state,null,2), 'application/json'); const d=document.getElementById('backupDialog'); if(d && d.open) d.close();};
@@ -1046,6 +922,163 @@ if(saveManualWorkoutBtn){ saveManualWorkoutBtn.onclick=saveManualWorkout; }
 
 function download(name,content,type){const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); URL.revokeObjectURL(a.href);}
 function toCsv(rows){const headers=['date','day','week','discipline','title','intensity','planMinutes','planKm','actualMinutes','actualKm','avgHr','maxHr','status','rpe','equipment','notes']; return headers.join(';')+'\n'+rows.map(r=>headers.map(h=>`"${String(r[h]??'').replaceAll('"','""')}"`).join(';')).join('\n');}
+
+/* === Safe feature layer v3: history tab, future program, goal popups, Garmin ICS, print, monthly bars === */
+(function(){
+  function n(v){ const x = Number(String(v ?? '').replace(',','.')); return Number.isFinite(x) ? x : 0; }
+  function isDoneStatus(s){ return ['Gennemført','Delvist gennemført','Sprunget over','Skadet/syg'].includes(s); }
+  function today(){ return todayIso(); }
+  function isFuturePlanned(w){ return String(w.date||'') >= today() && !isDoneStatus(w.status); }
+  function isHistory(w){ return String(w.date||'') < today() || isDoneStatus(w.status); }
+  function safeMinToTime(v){ return typeof minToTime === 'function' ? minToTime(v) : `${Math.floor(v/60)}:${String(Math.round(v%60)).padStart(2,'0')}`; }
+  function paceText(minPerKm){
+    if(!Number.isFinite(minPerKm) || minPerKm<=0) return '-';
+    const m=Math.floor(minPerKm); const s=Math.round((minPerKm-m)*60);
+    return `${m}:${String(s).padStart(2,'0')} min/km`;
+  }
+  function goalSplit(label,value,hint){ return `<div class="goal-popup-split"><small>${label}</small><strong>${value}</strong><span>${hint||''}</span></div>`; }
+
+  const originalRenderProgram = renderProgram;
+  renderProgram = function(){
+    const fromEl=document.getElementById('fromDate');
+    const toEl=document.getElementById('toDate');
+    const discEl=document.getElementById('disciplineFilter');
+    const from = fromEl?.value || today();
+    const to = toEl?.value || '2999-12-31';
+    const disc = discEl?.value || 'Alle';
+    const rows = (state.workouts||[]).filter(x=>isFuturePlanned(x) && x.date>=from && x.date<=to && (disc==='Alle'||x.discipline===disc));
+    const tbody=document.querySelector('#programTable tbody');
+    if(!tbody) return;
+    tbody.innerHTML = rows.map(x=>`<tr data-id="${x.id}" class="${statusClass(x.status)} ${x.date===todayIso()?'today':''}"><td>${dkDate(x.date)}</td><td>${x.day}</td><td>${x.week}</td><td>${x.discipline}</td><td>${x.title}</td><td>${x.intensity}</td><td>${x.planMinutes}</td><td>${x.planKm}</td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${x.avgHr||''}</td><td>${x.maxHr||''}</td><td>${x.status}</td><td>${x.rpe||''}</td><td>${x.equipment||''}</td><td>${x.notes||''}</td></tr>`).join('');
+    document.querySelectorAll('#programTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
+  };
+
+  function renderTrainings(){
+    const tbody=document.querySelector('#trainingsTable tbody');
+    if(!tbody) return;
+    const disc=document.getElementById('trainingsDisciplineFilter')?.value || 'Alle';
+    const rows=(state.workouts||[]).filter(isHistory).filter(x=>disc==='Alle'||x.discipline===disc).sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(a.discipline).localeCompare(String(b.discipline)));
+    tbody.innerHTML=rows.map(x=>{
+      const pulse=[x.avgHr,x.maxHr].filter(Boolean).join(' / ');
+      const notes=[x.equipment,x.notes].filter(Boolean).join(' · ');
+      return `<tr data-id="${x.id}" class="${statusClass(x.status)} training-history-row"><td>${dkDate(x.date)}</td><td>${x.day||''}</td><td>${x.week||''}</td><td>${x.discipline||''}</td><td><strong>${x.title||''}</strong><br><small>${x.intensity||''}</small></td><td>${x.actualMinutes||''}</td><td>${x.actualKm||''}</td><td>${pulse||''}</td><td>${x.status||''}</td><td>${notes||''}</td></tr>`;
+    }).join('');
+    document.querySelectorAll('#trainingsTable tbody tr').forEach(tr=>tr.onclick=()=>openEdit(tr.dataset.id));
+  }
+  window.renderTrainings = renderTrainings;
+
+  const originalRenderMonthly = renderMonthly;
+  renderMonthly = function(){
+    const map={}; state.workouts.forEach(w=>{const m=monthKey(w.date); map[m]??=[]; map[m].push(w);});
+    const tbody=document.querySelector('#monthlyTable tbody');
+    if(!tbody) return;
+    tbody.innerHTML = Object.keys(map).sort().map(m=>{
+      const a=map[m], ph=sum(a,'planMinutes')/60, ah=sum(a,'actualMinutes')/60, pct=ph?ah/ph:0;
+      const pctDisplay=Math.round(pct*100); const width=Math.max(0, Math.min(100, pctDisplay));
+      const swim=sum(a.filter(x=>x.discipline==='Svøm'),'actualKm'), bike=sum(a.filter(x=>x.discipline==='Cykling'),'actualKm'), run=sum(a.filter(x=>x.discipline==='Løb'),'actualKm');
+      let status='Afventer data', sug='Indtast faktisk træning den 15. i måneden.';
+      if(ah>0){ if(pct<.75){status='For lav belastning'; sug='Gentag eller reducer næste blok, især løb.';} else if(pct>1.15){status='For høj belastning'; sug='Hold øje med restitution og ømhed.';} else {status='OK'; sug='Fortsæt planlagt progression.';} }
+      return `<tr class="month-progress-row" style="--month-progress:${width}%"><td>${m}</td><td>${ph.toFixed(1)}</td><td>${ah.toFixed(1)}</td><td>${pctDisplay}%</td><td>${swim.toFixed(1)}</td><td>${bike.toFixed(1)}</td><td>${run.toFixed(1)}</td><td>${status}</td><td>${sug}</td></tr>`;
+    }).join('');
+  };
+
+  const originalRenderDashboard = renderDashboard;
+  renderDashboard = function(){
+    originalRenderDashboard();
+    const sub12=document.getElementById('sub12Forecast');
+    if(sub12) sub12.innerHTML='';
+  };
+
+  const originalRenderPrintWeek = renderPrintWeek;
+  renderPrintWeek = function(){
+    const sel = document.getElementById('printWeekSelect');
+    const area = document.getElementById('printWeekArea');
+    if(!sel || !area) return;
+    const week = Number(sel.value || weekNo(todayIso()));
+    const range = weekRangeForWeekNo(week);
+    const rows = state.workouts.filter(w => w.date >= range.start && w.date <= range.end).sort((a,b)=>a.date.localeCompare(b.date) || String(a.discipline).localeCompare(String(b.discipline)));
+    const title = document.getElementById('printWeekTitle');
+    const subtitle = document.getElementById('printWeekSubtitle');
+    const summary = document.getElementById('printWeekSummary');
+    const daysBox = document.getElementById('printWeekDays');
+    if(title) title.textContent = `Uge ${week}`;
+    if(subtitle) subtitle.textContent = `${dkDate(range.start)} - ${dkDate(range.end)} · én side`;
+    const planMinutes = sum(rows,'planMinutes');
+    const swimKm = sum(rows.filter(w=>w.discipline==='Svøm'),'planKm');
+    const bikeKm = sum(rows.filter(w=>w.discipline==='Cykling'),'planKm');
+    const runKm = sum(rows.filter(w=>w.discipline==='Løb'),'planKm');
+    if(summary){ summary.innerHTML = `<div><strong>${safeMinToTime(planMinutes)}</strong><span>Tid</span></div><div><strong>${swimKm.toFixed(1)} km</strong><span>Svøm</span></div><div><strong>${bikeKm.toFixed(0)} km</strong><span>Cykel</span></div><div><strong>${runKm.toFixed(1)} km</strong><span>Løb</span></div>`; }
+    const days=[];
+    for(let i=0;i<7;i++){
+      const date=addDaysIso(range.start,i); const dayRows=rows.filter(w=>w.date===date);
+      days.push(`<div class="print-day compact-print-day"><div class="print-day-head"><strong>${dayName(date)}</strong><span>${dkDate(date)}</span></div>${dayRows.length?dayRows.map(w=>`<div class="print-workout compact-print-workout print-${w.discipline}"><div class="print-workout-main"><span class="print-discipline">${w.discipline}</span><strong>${w.title}</strong><p>${w.intensity||''}</p>${w.equipment?`<small>${w.equipment}</small>`:''}</div><div class="print-workout-numbers"><div><strong>${w.planMinutes||0}</strong><span>min</span></div><div><strong>${w.planKm||0}</strong><span>km</span></div></div></div>`).join(''):`<div class="print-rest">Fri / restitution</div>`}</div>`);
+    }
+    if(daysBox) daysBox.innerHTML=days.join('');
+  };
+
+  function openGoalForecast(kind){
+    const dialog=document.getElementById('goalForecastDialog'); const title=document.getElementById('goalForecastTitle'); const sub=document.getElementById('goalForecastSubtitle'); const body=document.getElementById('goalForecastContent');
+    if(!dialog || !body) return;
+    const g = calculateGoalForecasts();
+    if(kind==='marathon'){
+      const total=g.marathon || 378; const first=total/2.07; const second=total-first; const fp=first/21.1; const sp=second/21.1;
+      title.textContent='Copenhagen Marathon prognose'; sub.textContent='9. maj 2027 · realistisk pace-strategi';
+      body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>${safeMinToTime(total)}</strong><p>Strategien er kontrolleret positiv split: du starter lidt friskere, men ikke hårdt, og accepterer et gradvist fald mod slutningen.</p></div><div class="goal-popup-splits">${goalSplit('0-10 km',paceText(fp*.98),'Let og kontrolleret')}${goalSplit('10-21,1 km',paceText(fp*1.02),'Find rytmen')}${goalSplit('21,1-32 km',paceText(sp*.98),'Hold igen')}${goalSplit('32-42,2 km',paceText(sp*1.04),'Løb/gå struktureret')}</div></div>`;
+    } else if(kind==='koege'){
+      const swim=42,bike=175,run=130; const total=(g.koege|| (swim+6+bike+4+run));
+      title.textContent='Køge Jernmand prognose'; sub.textContent='13. juni 2027 · 1,9 km / 90 km / 21,1 km';
+      body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>${safeMinToTime(total)}</strong><p>Bruges som generalprøve før IRONMAN. Fokus er rolig svøm, stabil cykel og et løb hvor du ikke åbner for hårdt.</p></div><div class="goal-popup-splits">${goalSplit('Svøm',safeMinToTime(swim),'1,9 km')}${goalSplit('T1','0:06','Roligt skift')}${goalSplit('Cykel',safeMinToTime(bike),'90 km')}${goalSplit('T2','0:04','Kontrolleret')}${goalSplit('Løb',safeMinToTime(run),'21,1 km')}</div></div>`;
+    } else {
+      const p=calculateSub12Forecast();
+      title.textContent='IRONMAN Copenhagen prognose'; sub.textContent='22. august 2027 · A-mål sub-12';
+      body.innerHTML=`<div class="goal-popup-main"><div><small>Forventet sluttid</small><strong>${safeMinToTime(p.total)}</strong><p>Aktuel vurdering: <strong>${p.status}</strong>. Prognosen bliver mere præcis, når historikken ligger i Træninger og Program kun viser fremtidige pas.</p></div><div class="goal-popup-splits">${goalSplit('Svøm',safeMinToTime(p.swim),'Mål ca. 1:30')}${goalSplit('T1',safeMinToTime(p.t1),'Roligt skift')}${goalSplit('Cykel',safeMinToTime(p.bike),'Mål ca. 6:00')}${goalSplit('T2',safeMinToTime(p.t2),'Kontrolleret')}${goalSplit('Løb',safeMinToTime(p.run),'Mål ca. 4:15')}</div></div>`;
+    }
+    dialog.showModal();
+  }
+
+  function bindGoalCards(){
+    document.querySelectorAll('.goal-card').forEach(card=>{
+      if(card.dataset.goalForecastBound) return;
+      const t=card.textContent||''; let kind='';
+      if(t.includes('Copenhagen Marathon')) kind='marathon'; else if(t.includes('Køge Jernmand')) kind='koege'; else if(t.includes('IRONMAN Copenhagen')) kind='ironman';
+      if(!kind) return;
+      card.dataset.goalForecastBound='1'; card.classList.add('clickable-goal-card'); card.tabIndex=0; card.title='Klik for prognose';
+      card.addEventListener('click',()=>openGoalForecast(kind));
+      card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGoalForecast(kind);}});
+    });
+  }
+
+  function escapeIcs(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
+  function exportGarminIcs(){
+    const rows=(state.workouts||[]).filter(isFuturePlanned).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(!rows.length){ alert('Der er ingen fremtidige planlagte træninger at eksportere.'); return; }
+    const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z');
+    const events=rows.map(w=>{
+      const dt=String(w.date).replaceAll('-','');
+      const desc=[`Disciplin: ${w.discipline||''}`,`Plan tid: ${w.planMinutes||0} min`,`Plan distance: ${w.planKm||0} km`,w.intensity?`Intervaller/intensitet: ${w.intensity}`:'',w.notes?`Noter: ${w.notes}`:'',(w.discipline==='Løb'&&n(w.planKm)>0&&n(w.planMinutes)>0)?`Pace: ${paceText(n(w.planMinutes)/n(w.planKm))}`:''].filter(Boolean).join('\n');
+      return ['BEGIN:VEVENT',`UID:${escapeIcs(w.id||Math.random())}@triathlon-app`,`DTSTAMP:${stamp}`,`DTSTART;VALUE=DATE:${dt}`,`SUMMARY:${escapeIcs((w.discipline||'Træning')+': '+(w.title||''))}`,`DESCRIPTION:${escapeIcs(desc)}`,'END:VEVENT'].join('\r\n');
+    }).join('\r\n');
+    download('garmin-planlagte-traeninger.ics',['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//JL Triathlon App//DA','CALSCALE:GREGORIAN',events,'END:VCALENDAR'].join('\r\n'),'text/calendar;charset=utf-8');
+  }
+
+  const originalRenderAll = renderAll;
+  renderAll = function(){
+    originalRenderAll();
+    renderTrainings();
+    bindGoalCards();
+  };
+
+  function bindSafeFeatureControls(){
+    ['fromDate','toDate','disciplineFilter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.onchange=renderProgram; });
+    const clear=document.getElementById('clearFiltersBtn');
+    if(clear) clear.onclick=()=>{ document.getElementById('fromDate').value=today(); document.getElementById('toDate').value=''; document.getElementById('disciplineFilter').value='Alle'; renderProgram(); };
+    const tf=document.getElementById('trainingsDisciplineFilter'); if(tf) tf.onchange=renderTrainings;
+    const gb=document.getElementById('garminExportBtn'); if(gb) gb.onclick=exportGarminIcs;
+  }
+  bindSafeFeatureControls();
+  setTimeout(()=>{ bindSafeFeatureControls(); renderProgram(); renderTrainings(); bindGoalCards(); }, 0);
+})();
+
 renderAll();
 
 
@@ -2166,8 +2199,8 @@ function renderPrintWeek(){
   const summary = document.getElementById('printWeekSummary');
   const daysBox = document.getElementById('printWeekDays');
 
-  if(title) title.textContent = `Uge ${week}`;
-  if(subtitle) subtitle.textContent = `${dkDate(range.start)} - ${dkDate(range.end)} · én side · uden notelinjer`;
+  if(title) title.textContent = `Træningsuge ${week}`;
+  if(subtitle) subtitle.textContent = `${dkDate(range.start)} - ${dkDate(range.end)} · Marathon → Køge Jernmand → IRONMAN Copenhagen`;
 
   const planMinutes = sum(rows,'planMinutes');
   const swimKm = sum(rows.filter(w=>w.discipline==='Svøm'),'planKm');
@@ -2176,7 +2209,7 @@ function renderPrintWeek(){
 
   if(summary){
     summary.innerHTML = `
-      <div><strong>${minToTime(planMinutes)}</strong><span>Tid</span></div>
+      <div><strong>${minToTime(planMinutes)}</strong><span>Planlagt tid</span></div>
       <div><strong>${swimKm.toFixed(1)} km</strong><span>Svøm</span></div>
       <div><strong>${bikeKm.toFixed(0)} km</strong><span>Cykel</span></div>
       <div><strong>${runKm.toFixed(1)} km</strong><span>Løb</span></div>`;
@@ -2186,20 +2219,28 @@ function renderPrintWeek(){
   for(let i=0;i<7;i++){
     const date = addDaysIso(range.start, i);
     const dayRows = rows.filter(w=>w.date===date);
-    days.push(`<div class="print-day compact-print-day">
+    days.push(`<div class="print-day">
       <div class="print-day-head"><strong>${dayName(date)}</strong><span>${dkDate(date)}</span></div>
       ${dayRows.length ? dayRows.map(w=>`
-        <div class="print-workout compact-print-workout print-${w.discipline}">
+        <div class="print-workout print-${w.discipline}">
           <div class="print-workout-main">
             <span class="print-discipline">${w.discipline}</span>
             <strong>${w.title}</strong>
             <p>${w.intensity || ''}</p>
-            ${w.equipment ? `<small>${w.equipment}</small>` : ''}
+            ${w.equipment ? `<small>Udstyr/sted: ${w.equipment}</small>` : ''}
           </div>
           <div class="print-workout-numbers">
             <div><strong>${w.planMinutes || 0}</strong><span>min</span></div>
             <div><strong>${w.planKm || 0}</strong><span>km</span></div>
           </div>
+          <div class="print-handwrite">
+            <div>Faktisk tid: ______</div>
+            <div>Faktisk km: ______</div>
+            <div>RPE: ______</div>
+            <div>Puls: ______</div>
+            <div>Status: __________</div>
+          </div>
+          <div class="print-notes">Noter: ________________________________________________________________</div>
         </div>`).join('') : `<div class="print-rest">Fri / restitution</div>`}
     </div>`);
   }

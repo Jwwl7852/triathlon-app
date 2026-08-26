@@ -410,43 +410,8 @@ button{
 }
 
 
-/* Real changes v2 */
-#sub12Forecast{display:none !important}
+/* Safe feature layer v3 styling */
+#sub12Forecast{display:none!important}
 .section-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}
 .training-history-row{background:rgba(34,197,94,.10)}
-#programTable tbody tr{background:#fff}
-.month-progress-row{position:relative;background:linear-gradient(90deg, rgba(34,197,94,.30) var(--month-progress), transparent var(--month-progress)) !important}
-.month-progress-row td{position:relative;z-index:1;background:transparent !important}
-.clickable-goal-card{cursor:pointer;transition:transform .12s ease, box-shadow .12s ease}
-.clickable-goal-card:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(15,23,42,.10)}
-.goal-forecast-dialog{max-width:min(900px,94vw)}
-.dialog-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}
-.goal-forecast-content{display:grid;gap:14px}
-.goal-popup-main{display:grid;grid-template-columns:.75fr 1.25fr;gap:16px}
-.goal-popup-main small{display:block;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-.goal-popup-main strong{display:block;font-size:40px;color:#1d4ed8;margin:4px 0 8px}
-.goal-popup-main p{color:var(--muted);line-height:1.45}
-.goal-popup-splits{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.goal-popup-split{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:12px}
-.goal-popup-split small{font-size:11px}
-.goal-popup-split strong{font-size:22px;color:#07142f;margin:2px 0}
-.goal-popup-split span{display:block;color:var(--muted);font-size:12px}
-.compact-print-workout .print-handwrite,.compact-print-workout .print-notes{display:none !important}
-.compact-print-workout{padding:8px 10px !important;margin-bottom:6px !important}
-.compact-print-day{padding:8px !important}
-.print-week-days{gap:6px !important}
-@media(max-width:760px){
-  .goal-popup-main{grid-template-columns:1fr}
-  .goal-popup-splits{grid-template-columns:1fr}
-}
-@media print{
-  header,.tabs,.no-print,.toolbar,.header-actions{display:none !important}
-  .panel{display:none !important}
-  #printweek{display:block !important}
-  #printWeekArea{box-shadow:none !important;border:0 !important;padding:0 !important}
-  .print-week-sheet{font-size:10px !important}
-  .print-workout{break-inside:avoid;padding:5px 6px !important;margin-bottom:3px !important}
-  .print-day{padding:5px !important}
-  .print-workout p{margin:2px 0 !important}
-  @page{size:A4 portrait;margin:8mm}
-}
+#programTable tbody tr{background:#fff}.month-progress-row{background:linear-gradient(90deg,rgba(34,197,94,.30) var(--month-progress),transparent var(--month-progress))!important}.month-progress-row td{background:transparent!important}.clickable-goal-card{cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}.clickable-goal-card:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(15,23,42,.10)}.goal-forecast-dialog{max-width:min(900px,94vw)}.dialog-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}.goal-forecast-content{display:grid;gap:14px}.goal-popup-main{display:grid;grid-template-columns:.75fr 1.25fr;gap:16px}.goal-popup-main small{display:block;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.goal-popup-main strong{display:block;font-size:40px;color:#1d4ed8;margin:4px 0 8px}.goal-popup-main p{color:var(--muted);line-height:1.45}.goal-popup-splits{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.goal-popup-split{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:12px}.goal-popup-split small{font-size:11px}.goal-popup-split strong{font-size:22px;color:#07142f;margin:2px 0}.goal-popup-split span{display:block;color:var(--muted);font-size:12px}.compact-print-workout .print-handwrite,.compact-print-workout .print-notes{display:none!important}.compact-print-workout{padding:8px 10px!important;margin-bottom:6px!important;grid-template-columns:1fr 110px!important}.compact-print-day{padding:8px!important}.print-week-days{gap:6px!important}@media(max-width:760px){.goal-popup-main{grid-template-columns:1fr}.goal-popup-splits{grid-template-columns:1fr}}@media print{header,.tabs,.no-print,.toolbar,.header-actions{display:none!important}.panel{display:none!important}#printweek{display:block!important}#printWeekArea{box-shadow:none!important;border:0!important;padding:0!important}.print-week-sheet{font-size:10px!important}.print-workout{break-inside:avoid;padding:5px 6px!important;margin-bottom:3px!important}.print-day{padding:5px!important}.print-workout p{margin:2px 0!important}@page{size:A4 portrait;margin:8mm}}
