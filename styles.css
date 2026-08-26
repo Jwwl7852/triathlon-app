@@ -224,3 +224,26 @@ button.mini{padding:7px 11px;font-size:12px;border-radius:10px}
 .ai-adjustment{border-top:1px solid var(--line);padding:8px 0}
 
 .auto-sync-note{font-size:13px;color:var(--muted);margin-top:8px}
+
+.activity-detail-dialog{max-width:min(1180px,96vw)}
+.activity-detail-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}
+.activity-detail-content{display:grid;gap:14px}
+.activity-hero-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:14px}
+.activity-map-card,.activity-stat-card,.activity-chart-card,.activity-laps-card{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;overflow:hidden}
+.activity-map-wrap{background:#eff6ff;border-radius:14px;border:1px solid var(--line);overflow:hidden}
+.activity-map-wrap svg{display:block;width:100%;height:auto}
+.activity-map-empty{padding:36px;text-align:center;color:var(--muted);background:#f8fafc;border-radius:14px;border:1px dashed var(--line)}
+.activity-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.activity-stat{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:10px}
+.activity-stat small{display:block;color:var(--muted);font-size:12px}
+.activity-stat strong{display:block;font-size:18px;margin-top:3px}
+.activity-chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.activity-chart-card svg{width:100%;height:auto;display:block}
+.activity-chart-title{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}
+.activity-chart-title small{color:var(--muted)}
+.activity-laps-card table{width:100%;border-collapse:collapse}
+.activity-laps-card th,.activity-laps-card td{border-bottom:1px solid var(--line);padding:8px;text-align:left;font-size:13px}
+.activity-row-clickable{cursor:pointer}
+.activity-row-clickable:hover{background:#f8fafc}
+@media(max-width:860px){.activity-hero-grid,.activity-chart-grid{grid-template-columns:1fr}.activity-detail-head{flex-direction:column}.activity-stat-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.activity-stat-grid{grid-template-columns:1fr}}

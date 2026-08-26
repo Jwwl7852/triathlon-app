@@ -1689,7 +1689,7 @@ async function syncStrava(){
 }
 async function loadStravaActivities(){
   try{
-    const data=await stravaFetch('/api/strava/activities');
+    const data=await stravaFetch('/api/strava/activities?limit=300');
     renderStravaActivities(data.activities || []);
     return data.activities || [];
   }catch(e){
@@ -1730,7 +1730,7 @@ function renderStravaActivities(activities){
     const match=findMatchingWorkoutForStrava(a);
     const hr=[a.average_heartrate || a.averageHeartRate, a.max_heartrate || a.maxHeartRate].filter(Boolean).join(' / ');
     const watts=a.average_watts || a.weighted_average_watts || a.averageWatts || '';
-    return `<tr>
+    return `<tr data-strava-id="${a.id || ''}" class="activity-row-clickable" title="Klik for detaljer, kort og grafer">
       <td>${date ? dkDate(date) : ''}</td>
       <td>${stravaTypeToDiscipline(a.sport_type || a.type)}</td>
       <td>${a.name || ''}</td>
