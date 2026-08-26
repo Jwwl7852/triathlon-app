@@ -54,6 +54,7 @@
       <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="coach">Coach</button>
       <button class="tab" data-tab="strava">Strava</button>
+      <button class="tab" data-tab="trainings">Træninger</button>
       <button class="tab" data-tab="program">Program</button>
       <button class="tab" data-tab="printweek">Print uge</button>
       <button class="tab" data-tab="monthly">Månedsstatus</button>
@@ -166,6 +167,39 @@
       </div>
     </section>
 
+
+    <section id="trainings" class="panel">
+      <div class="card">
+        <div class="section-head">
+          <div>
+            <h3>Træninger</h3>
+            <p class="hint">Her ligger alle træninger, der allerede er sket: gennemførte, importerede og historiske pas.</p>
+          </div>
+          <label>Disciplin
+            <select id="trainingsDisciplineFilter">
+              <option value="Alle">Alle</option>
+              <option>Svøm</option>
+              <option>Cykling</option>
+              <option>Løb</option>
+              <option>Styrke</option>
+              <option>Race</option>
+              <option>Restitution</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table id="trainingsTable">
+            <thead>
+              <tr>
+                <th>Dato</th><th>Dag</th><th>Uge</th><th>Disciplin</th><th>Træning</th><th>Intensitet</th><th>Faktisk tid</th><th>Faktisk km</th><th>Gns. puls</th><th>Maks puls</th><th>Status</th><th>RPE</th><th>Udstyr/sted</th><th>Noter</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section id="program" class="panel">
       <div class="toolbar">
         <div>
@@ -189,7 +223,7 @@
         <table id="programTable">
           <thead>
             <tr>
-              <th>Dato</th><th>Dag</th><th>Uge</th><th>Disciplin</th><th>Plan</th><th>Intensitet</th><th>Plan tid</th><th>Plan km</th><th>Faktisk tid</th><th>Faktisk km</th><th>Gns. puls</th><th>Maks puls</th><th>Status</th><th>RPE</th><th>Udstyr/sted</th><th>Noter</th>
+              <th>Dato</th><th>Dag</th><th>Uge</th><th>Disciplin</th><th>Plan</th><th>Garmin</th><th>Intensitet</th><th>Plan tid</th><th>Plan km</th><th>Faktisk tid</th><th>Faktisk km</th><th>Gns. puls</th><th>Maks puls</th><th>Status</th><th>RPE</th><th>Udstyr/sted</th><th>Noter</th>
             </tr>
           </thead>
           <tbody></tbody>
